@@ -1,2 +1,2 @@
 export { type UpdateManifest } from './types'
-export { type UseUpdaterOptions, type UseUpdaterReturn, useUpdater } from './useUpdater'
+export { useUpdater, type UseUpdaterOptions, type UseUpdaterReturn } from './useUpdater'

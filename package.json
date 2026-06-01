@@ -19,9 +19,6 @@
   },
   "license": "MIT",
   "author": "Jay Deaton",
-  "bin": {
-    "rific-bump-ota": "./scripts/bump-ota-version.mjs"
-  },
   "sideEffects": false,
   "type": "commonjs",
   "exports": {
@@ -35,6 +32,9 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "bin": {
+    "rific-bump-ota": "./scripts/bump-ota-version.mjs"
+  },
   "files": [
     "dist",
     "scripts"
@@ -64,6 +64,7 @@
     "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react-native": "^5.0.0",
     "eslint-plugin-simple-import-sort": "^13.0.0",
+    "expo-updates": ">=0.25.0",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
     "prettier": "^3.8.3",
