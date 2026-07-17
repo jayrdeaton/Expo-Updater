@@ -1,7 +1,7 @@
 {
   "name": "@rific/updater",
   "version": "0.2.0",
-  "description": "OTA update hook for Expo apps — silent background fetch on foreground, manual check with confirmation dialog",
+  "description": "OTA update hook for Expo apps \u2014 silent background fetch on foreground, manual check with confirmation dialog",
   "keywords": [
     "expo",
     "expo-updates",
@@ -23,7 +23,7 @@
   "type": "commonjs",
   "exports": {
     ".": {
-      "react-native": "./src/index.ts",
+      "react-native": "./dist/index.js",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
