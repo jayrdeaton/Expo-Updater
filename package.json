@@ -1,7 +1,7 @@
 {
   "name": "@rific/updater",
   "version": "0.1.1",
-  "description": "OTA update hook for Expo apps — silent background fetch on foreground, manual check with confirmation dialog",
+  "description": "OTA update hook for Expo apps \u2014 silent background fetch on foreground, manual check with confirmation dialog",
   "keywords": [
     "expo",
     "expo-updates",
@@ -23,8 +23,8 @@
   "type": "commonjs",
   "exports": {
     ".": {
+      "react-native": "./src/index.ts",
       "types": "./dist/index.d.ts",
-      "react-native": "./dist/index.js",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     }
@@ -37,7 +37,10 @@
   },
   "files": [
     "dist",
-    "scripts"
+    "scripts",
+    "src",
+    "!src/__tests__",
+    "!src/__mocks__"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts --clean",
@@ -51,7 +54,7 @@
     "test": "jest",
     "test:watch": "jest --watchAll",
     "typecheck": "tsc --noEmit",
-    "preversion": "npm run lint && npm test"
+    "preversion": "npm run lint && npm test && npm run build"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
@@ -77,8 +80,8 @@
   },
   "peerDependencies": {
     "expo-updates": ">=0.25.0",
-    "react": ">=17.0.0",
-    "react-native": ">=0.70.0"
+    "react": ">=18.0.0",
+    "react-native": ">=0.76.0"
   },
   "publishConfig": {
     "access": "public"
