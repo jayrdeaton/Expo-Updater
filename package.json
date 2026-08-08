@@ -23,7 +23,7 @@
   "type": "commonjs",
   "exports": {
     ".": {
-      "react-native": "./dist/index.js",
+      "react-native": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
@@ -31,6 +31,7 @@
   },
   "main": "dist/index.js",
   "module": "dist/index.mjs",
+  "react-native": "src/index.ts",
   "types": "dist/index.d.ts",
   "bin": {
     "rific-bump-ota": "./scripts/bump-ota-version.mjs"
@@ -80,8 +81,8 @@
     "typescript-eslint": "^8.59.3"
   },
   "peerDependencies": {
-    "expo-updates": ">=0.25.0",
-    "react": ">=18.0.0",
+    "expo-updates": ">=57.0.0",
+    "react": ">=19.0.0",
     "react-native": ">=0.76.0"
   },
   "publishConfig": {
