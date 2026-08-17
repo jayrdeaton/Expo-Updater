@@ -8,6 +8,7 @@ import { UpdateManifest } from './types'
 
 export interface UseUpdaterOptions {
   autoCheck?: boolean
+  autoPrompt?: boolean
   onConfirm?: (manifest: UpdateManifest) => Promise<boolean>
   onError?: (message: string) => void
 }
@@ -21,12 +22,18 @@ export interface UseUpdaterReturn {
 const isUnsupported = () => __DEV__ || Platform.OS === 'web'
 
 export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn => {
-  const { autoCheck = true, onConfirm, onError } = options
+  const { autoCheck = true, autoPrompt = true, onConfirm, onError } = options
   const [checking, setChecking] = useState(false)
   const [updateReady, setUpdateReady] = useState(false)
   const checkingRef = useRef(false)
   const appState = useRef(AppState.currentState)
   const stagedManifest = useRef<UpdateManifest | null>(null)
+  // Read via refs inside the AppState listener so onConfirm/onError identity changes (e.g. an
+  // inline arrow function) don't tear down and re-subscribe the listener on every render.
+  const onConfirmRef = useRef(onConfirm)
+  const onErrorRef = useRef(onError)
+  onConfirmRef.current = onConfirm
+  onErrorRef.current = onError
 
   useEffect(() => {
     if (!autoCheck || isUnsupported()) return
@@ -34,10 +41,27 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (/inactive|background/.test(appState.current) && nextState === 'active') {
         checkForUpdate()
-          .then((manifest) => {
-            if (manifest) {
-              stagedManifest.current = manifest
-              setUpdateReady(true)
+          .then(async (manifest) => {
+            if (!manifest) return
+            stagedManifest.current = manifest
+            setUpdateReady(true)
+            if (!autoPrompt || checkingRef.current) return
+
+            checkingRef.current = true
+            setChecking(true)
+            try {
+              const confirmFn = onConfirmRef.current ?? getUpdateConfirmation
+              const confirmed = await confirmFn(manifest)
+              if (confirmed) await reloadAsync()
+            } catch (err) {
+              const message = err instanceof Error ? err.message : 'Could not check for updates.'
+              if (onErrorRef.current) onErrorRef.current(message)
+              else Alert.alert('Update error', message)
+            } finally {
+              stagedManifest.current = null
+              setUpdateReady(false)
+              checkingRef.current = false
+              setChecking(false)
             }
           })
           .catch(() => {})
@@ -46,7 +70,7 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
     })
 
     return () => subscription.remove()
-  }, [autoCheck])
+  }, [autoCheck, autoPrompt])
 
   const check = async (): Promise<void> => {
     if (__DEV__) {

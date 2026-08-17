@@ -91,7 +91,10 @@ describe('useUpdater', () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
-      const { result } = renderHook(() => useUpdater())
+      // autoPrompt: false — this test is about check() reusing a manifest a prior silent
+      // foreground fetch staged, which only sits around waiting for reuse when autoPrompt isn't
+      // already consuming it immediately.
+      const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
       await act(async () => { mockAppState.__emit('active') })
       expect(result.current.updateReady).toBe(true)
 
@@ -108,7 +111,7 @@ describe('useUpdater', () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
-      const { result } = renderHook(() => useUpdater())
+      const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
       await act(async () => { mockAppState.__emit('active') })
       expect(result.current.updateReady).toBe(true)
 
@@ -171,11 +174,11 @@ describe('useUpdater', () => {
   })
 
   describe('foreground check', () => {
-    it('silently fetches and sets updateReady when app comes to foreground', async () => {
+    it('silently fetches and sets updateReady when app comes to foreground (autoPrompt off)', async () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
-      const { result, unmount } = renderHook(() => useUpdater())
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: false }))
       await act(async () => { mockAppState.__emit('active') })
       expect(checkForUpdateAsync).toHaveBeenCalled()
       expect(result.current.updateReady).toBe(true)
@@ -221,6 +224,143 @@ describe('useUpdater', () => {
       unmount()
       mockAppState.__emit('active')
       expect(checkForUpdateAsync).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('autoPrompt', () => {
+    it('does not show the confirm dialog on foreground when autoPrompt is explicitly false', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      mockAppState.__setCurrentState('background')
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: false }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(result.current.updateReady).toBe(true)
+      expect(alertAlert).not.toHaveBeenCalled()
+      expect(reloadAsync).not.toHaveBeenCalled()
+      unmount()
+    })
+
+    it('shows the confirm dialog automatically on foreground by default (autoPrompt unset)', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      mockAppState.__setCurrentState('background')
+      const { unmount } = renderHook(() => useUpdater())
+      await act(async () => { mockAppState.__emit('active') })
+      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Bug fixes'), expect.any(Array))
+      unmount()
+    })
+
+    it('reloads when the user confirms the auto-prompted dialog', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      ;(reloadAsync as jest.Mock).mockResolvedValue(undefined)
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[1].onPress()
+      })
+      mockAppState.__setCurrentState('background')
+      const { unmount } = renderHook(() => useUpdater({ autoPrompt: true }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(reloadAsync).toHaveBeenCalled()
+      unmount()
+    })
+
+    it('does not reload when the user cancels the auto-prompted dialog', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[0].onPress()
+      })
+      mockAppState.__setCurrentState('background')
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(reloadAsync).not.toHaveBeenCalled()
+      expect(result.current.updateReady).toBe(false)
+      unmount()
+    })
+
+    it('calls onConfirm instead of the default Alert when auto-prompting', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      const onConfirm = jest.fn().mockResolvedValue(false)
+      mockAppState.__setCurrentState('background')
+      const { unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(onConfirm).toHaveBeenCalledWith(mockManifest)
+      expect(alertAlert).not.toHaveBeenCalledWith('Update available', expect.any(String), expect.any(Array))
+      unmount()
+    })
+
+    it('routes errors to onError when auto-prompting throws', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      const onConfirm = jest.fn().mockRejectedValue(new Error('Confirm failed'))
+      const onError = jest.fn()
+      mockAppState.__setCurrentState('background')
+      const { unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm, onError }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(onError).toHaveBeenCalledWith('Confirm failed')
+      unmount()
+    })
+
+    it('sets checking to true while auto-prompting', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      let resolveConfirm!: (v: boolean) => void
+      const onConfirm = jest.fn().mockReturnValue(new Promise((res) => (resolveConfirm = res)))
+      mockAppState.__setCurrentState('background')
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(result.current.checking).toBe(true)
+      await act(async () => { resolveConfirm(false) })
+      expect(result.current.checking).toBe(false)
+      unmount()
+    })
+
+    it('ignores a manual check while an auto-prompt is in flight', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      let resolveConfirm!: (v: boolean) => void
+      const onConfirm = jest.fn().mockReturnValue(new Promise((res) => (resolveConfirm = res)))
+      mockAppState.__setCurrentState('background')
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
+      await act(async () => { mockAppState.__emit('active') })
+      expect(result.current.checking).toBe(true)
+
+      jest.clearAllMocks()
+      await act(() => result.current.check())
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+      expect(onConfirm).not.toHaveBeenCalled()
+
+      await act(async () => { resolveConfirm(false) })
+      unmount()
+    })
+
+    it('does not auto-prompt again while a manual check is in flight', async () => {
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      let resolveCheckFetch!: (v: { isAvailable: boolean }) => void
+      ;(checkForUpdateAsync as jest.Mock).mockReturnValue(new Promise((res) => (resolveCheckFetch = res)))
+      const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true }))
+
+      act(() => {
+        result.current.check()
+      })
+      expect(result.current.checking).toBe(true)
+
+      // Let the manual check's fetch resolve so it reaches the (never-resolving, default-mock)
+      // confirm dialog — checkingRef stays true throughout since no button gets pressed.
+      await act(async () => { resolveCheckFetch({ isAvailable: true }) })
+      expect(alertAlert).toHaveBeenCalledTimes(1)
+      expect(result.current.checking).toBe(true)
+
+      // A manual check is now genuinely in flight (mid-confirm). A foreground transition still
+      // fetches (autoCheck runs independently), but must not open a second, competing prompt.
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      alertAlert.mockClear()
+      mockAppState.__setCurrentState('background')
+      await act(async () => { mockAppState.__emit('active') })
+      expect(alertAlert).not.toHaveBeenCalled()
+
+      unmount()
     })
   })
 })
