@@ -1,6 +1,6 @@
 {
   "name": "@rific/updater",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "OTA update hook for Expo apps — silent background fetch on foreground, manual check with confirmation dialog",
   "keywords": [
     "expo",
