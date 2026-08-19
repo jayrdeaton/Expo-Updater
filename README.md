@@ -1,6 +1,6 @@
 # @rific/updater
 
-OTA update hook for Expo apps. Checks for updates in the background when the app is foregrounded and prompts to restart as soon as one's found, and exposes a manual `check()` for settings screens. No surprise restarts — the user always confirms before the app reloads.
+OTA update hook for Expo apps. Checks for updates on launch and again whenever the app is foregrounded, prompting to restart as soon as one's found, and exposes a manual `check()` for settings screens. No surprise restarts — the user always confirms before the app reloads.
 
 ---
 
@@ -55,13 +55,13 @@ const { check, checking } = useUpdater({
 })
 ```
 
-### Disable automatic foreground check entirely
+### Disable automatic mount/foreground checks entirely
 
 ```tsx
 const { check, checking } = useUpdater({ autoCheck: false })
 ```
 
-Fully manual — no `AppState` listener at all, `check()` always fetches fresh. `autoPrompt` is irrelevant here.
+Fully manual — no mount-time fetch, no `AppState` listener, `check()` always fetches fresh. `autoPrompt` is irrelevant here.
 
 ### Silent background staging only (no auto-prompt)
 
@@ -69,7 +69,7 @@ Fully manual — no `AppState` listener at all, `check()` always fetches fresh. 
 const { check, checking, updateReady } = useUpdater({ autoPrompt: false })
 ```
 
-Foreground fetches still run and stage the update (`updateReady` flips `true`), but the confirm dialog only shows up via a manual `check()` — same as the settings-screen example above. Good for games or anything where you don't want a dialog interrupting the user; the staged bundle still applies on the next cold launch even if `check()` is never called.
+Mount and foreground fetches still run and stage the update (`updateReady` flips `true`), but the confirm dialog only shows up via a manual `check()` — same as the settings-screen example above. Good for games or anything where you don't want a dialog interrupting the user.
 
 ---
 
@@ -94,8 +94,8 @@ interface UseUpdaterReturn {
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `autoCheck` | `true` | Registers an `AppState` listener that fetches available updates whenever the app comes to the foreground. Disable for apps that want full manual control. |
-| `autoPrompt` | `true` | When a foreground `autoCheck` fetch finds an update, run the confirmation dialog (and reload on confirm) immediately. Set `false` to fall back to the old behavior — silently stage it for a manual `check()` or the next cold launch instead. Ignored if `autoCheck` is `false`. A manual `check()` call and an auto-prompt won't run concurrently — whichever is in flight blocks the other. |
+| `autoCheck` | `true` | Fetches available updates once on mount and again via an `AppState` listener whenever the app comes to the foreground. Disable for apps that want full manual control. |
+| `autoPrompt` | `true` | When a mount or foreground `autoCheck` fetch finds an update, run the confirmation dialog (and reload on confirm) immediately. Set `false` to fall back to the old behavior — silently stage it for a manual `check()` or the next cold launch instead. Ignored if `autoCheck` is `false`. A manual `check()` call and an auto-prompt won't run concurrently — whichever is in flight blocks the other. |
 | `onConfirm` | — | Custom confirmation dialog. Receives the update manifest, must return `Promise<boolean>` — `true` to reload, `false` to cancel. Defaults to a native `Alert` showing the release date and metadata message. |
 | `onError` | — | Called with an error message string if `check()` throws. Defaults to `Alert.alert`. |
 
@@ -109,7 +109,7 @@ interface UseUpdaterReturn {
 
 ## How updates work
 
-**Automatic (foreground):** When `autoCheck` is `true`, the hook registers an `AppState` listener. Each time the app returns from background/inactive to active, it calls `checkForUpdateAsync()` + `fetchUpdateAsync()`. By default (`autoPrompt: true`) a found update goes straight into the confirmation dialog and `reloadAsync()` on confirm — no tap required. With `autoPrompt: false`, the downloaded bundle just sits on disk instead — no prompt, no restart — until a manual `check()` or the **next cold launch**, which automatically runs it.
+**Automatic (mount + foreground):** When `autoCheck` is `true`, the hook fetches once on mount (covering cold launch) and also registers an `AppState` listener that re-fetches each time the app returns from background/inactive to active. Both paths call `checkForUpdateAsync()` + `fetchUpdateAsync()` and share the same confirm/reload flow. By default (`autoPrompt: true`) a found update goes straight into the confirmation dialog and `reloadAsync()` on confirm — no tap required. With `autoPrompt: false`, the downloaded bundle just sits on disk instead — no prompt, no restart — until a manual `check()` is called.
 
 **Manual (`check()`):** Runs the full flow — check (or reuse staged manifest) → confirmation dialog → `reloadAsync()`. The user sees what was released and chooses whether to restart now.
 
@@ -165,11 +165,13 @@ The path argument defaults to `src/constants/release.ts` if omitted.
 ## Consuming apps
 
 > **0.3.0 changed the default:** `autoPrompt` now defaults to `true`, so a bare `useUpdater()` prompts on its own the moment a foreground fetch finds something — it no longer just stages silently for next launch. Every app below was written against the old silent-by-default behavior; pass `autoPrompt: false` explicitly if that's still what you want (this is what Lumber's and CashierFu-Utility's manual-check hooks already do via `autoCheck: false`, so they're unaffected — it's the bare root-layout `useUpdater()` calls and the games that actually change behavior on upgrade).
+>
+> **Next release adds a mount-time check:** `autoCheck` now also fetches once on mount, in addition to the existing foreground `AppState` listener — covering cold launch, which previously only got an update via native `expo-updates` (`checkAutomatically`), silently and outside this hook's confirm/reload flow. Any app with a bare root-layout `useUpdater()` (default `autoPrompt: true`) will now show the confirm dialog on cold launch too, not just on foreground return.
 
 - **Lumber** (`../Lumber`) — account screen, shows version + update badge. Root layout's bare `useUpdater()` will start auto-prompting on upgrade unless changed.
 - **CashierFu-Utility** (`../CashierFu-Utility`) — settings modal, uses `@rific/toaster` for `onError`. Same root-layout caveat as Lumber.
 - **Swirlio** (`../Swirlio`) — top sheet; now just relies on the `autoPrompt` default rather than passing it explicitly.
-- Games (Setter, Hangman, Crumby, HexFleet, etc.) — call `useUpdater()` with no options, relying on the old silent-only default. Will start prompting on foreground return (not during active play — the listener only fires on a background→active transition) unless given `autoPrompt: false`.
+- Games (Setter, Hangman, Crumby, HexFleet, etc.) — call `useUpdater()` with no options, relying on the old silent-only default. Will start prompting on cold launch and on foreground return (not during active play — the listener only fires on a background→active transition) unless given `autoPrompt: false`.
 
 ### Local development (yalc)
 

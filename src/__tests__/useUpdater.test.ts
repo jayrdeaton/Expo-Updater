@@ -164,12 +164,77 @@ describe('useUpdater', () => {
     it('ignores concurrent calls while checking', async () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
       const { result } = renderHook(() => useUpdater())
+      await act(async () => {})
+      jest.clearAllMocks()
       await act(async () => {
         result.current.check()
         result.current.check()
         result.current.check()
       })
       expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('mount check', () => {
+    it('fetches and auto-prompts on mount when an update is available', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[0].onPress()
+      })
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(checkForUpdateAsync).toHaveBeenCalled()
+      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Bug fixes'), expect.any(Array))
+    })
+
+    it('reloads when the user confirms the mount-time prompt', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      ;(reloadAsync as jest.Mock).mockResolvedValue(undefined)
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[1].onPress()
+      })
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(reloadAsync).toHaveBeenCalled()
+    })
+
+    it('stages silently without prompting on mount when autoPrompt is false', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+      ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+      const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
+      await act(async () => {})
+      expect(result.current.updateReady).toBe(true)
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
+    it('does not set updateReady when no update found on mount', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      const { result } = renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(result.current.updateReady).toBe(false)
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
+    it('does not fetch on mount in dev mode', async () => {
+      g.__DEV__ = true
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+    })
+
+    it('does not fetch on mount on web', async () => {
+      ;(Platform as { OS: string }).OS = 'web'
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+    })
+
+    it('does not fetch on mount when autoCheck is false', async () => {
+      renderHook(() => useUpdater({ autoCheck: false }))
+      await act(async () => {})
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
     })
   })
 
@@ -218,9 +283,11 @@ describe('useUpdater', () => {
       expect(AppState.addEventListener).not.toHaveBeenCalled()
     })
 
-    it('removes AppState listener on unmount', () => {
+    it('removes AppState listener on unmount', async () => {
       const { unmount } = renderHook(() => useUpdater())
       expect(AppState.addEventListener).toHaveBeenCalledTimes(1)
+      await act(async () => {})
+      jest.clearAllMocks()
       unmount()
       mockAppState.__emit('active')
       expect(checkForUpdateAsync).not.toHaveBeenCalled()

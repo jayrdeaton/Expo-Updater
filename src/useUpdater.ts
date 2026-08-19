@@ -38,33 +38,41 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
   useEffect(() => {
     if (!autoCheck || isUnsupported()) return
 
+    const runAutoCheck = () => {
+      checkForUpdate()
+        .then(async (manifest) => {
+          if (!manifest) return
+          stagedManifest.current = manifest
+          setUpdateReady(true)
+          if (!autoPrompt || checkingRef.current) return
+
+          checkingRef.current = true
+          setChecking(true)
+          try {
+            const confirmFn = onConfirmRef.current ?? getUpdateConfirmation
+            const confirmed = await confirmFn(manifest)
+            if (confirmed) await reloadAsync()
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Could not check for updates.'
+            if (onErrorRef.current) onErrorRef.current(message)
+            else Alert.alert('Update error', message)
+          } finally {
+            stagedManifest.current = null
+            setUpdateReady(false)
+            checkingRef.current = false
+            setChecking(false)
+          }
+        })
+        .catch(() => {})
+    }
+
+    // Cold launch: run the same check+prompt flow as a foreground resume so update
+    // discovery is consistent regardless of how the app was started.
+    runAutoCheck()
+
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (/inactive|background/.test(appState.current) && nextState === 'active') {
-        checkForUpdate()
-          .then(async (manifest) => {
-            if (!manifest) return
-            stagedManifest.current = manifest
-            setUpdateReady(true)
-            if (!autoPrompt || checkingRef.current) return
-
-            checkingRef.current = true
-            setChecking(true)
-            try {
-              const confirmFn = onConfirmRef.current ?? getUpdateConfirmation
-              const confirmed = await confirmFn(manifest)
-              if (confirmed) await reloadAsync()
-            } catch (err) {
-              const message = err instanceof Error ? err.message : 'Could not check for updates.'
-              if (onErrorRef.current) onErrorRef.current(message)
-              else Alert.alert('Update error', message)
-            } finally {
-              stagedManifest.current = null
-              setUpdateReady(false)
-              checkingRef.current = false
-              setChecking(false)
-            }
-          })
-          .catch(() => {})
+        runAutoCheck()
       }
       appState.current = nextState
     })
