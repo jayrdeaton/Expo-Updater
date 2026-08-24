@@ -3,6 +3,7 @@ const prettierRecommended = require('eslint-plugin-prettier/recommended')
 const simpleImportSort = require('eslint-plugin-simple-import-sort')
 const tsParser = require('@typescript-eslint/parser')
 const eslintReactNative = require('eslint-plugin-react-native')
+const reactHooks = require('eslint-plugin-react-hooks')
 const tsEslint = require('typescript-eslint')
 const packageJson = require('eslint-plugin-package-json')
 
@@ -32,6 +33,7 @@ module.exports = defineConfig([
   },
   {
     plugins: {
+      'react-hooks': reactHooks,
       'react-native': eslintReactNative,
       'simple-import-sort': simpleImportSort
     },
@@ -44,7 +46,16 @@ module.exports = defineConfig([
       'react-native/no-unused-styles': 'warn',
       'react-native/no-raw-text': 'off',
       '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-require-imports': 'off'
+      '@typescript-eslint/no-require-imports': 'off',
+      // rules-of-hooks stays at error — it's the foundational hook-ordering check, not a judgment
+      // call. The rest match @tastic/hud's severities (warn, not error) — see that repo's
+      // eslint.config.cjs for the reasoning behind refs/set-state-in-effect specifically.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+      'react-hooks/refs': 'warn',
+      'react-hooks/immutability': 'warn',
+      'react-hooks/preserve-manual-memoization': 'warn',
+      'react-hooks/set-state-in-effect': 'warn'
     }
   }
 ])

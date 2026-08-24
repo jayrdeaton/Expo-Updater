@@ -11,6 +11,11 @@ export interface UseUpdaterOptions {
   autoPrompt?: boolean
   onConfirm?: (manifest: UpdateManifest) => Promise<boolean>
   onError?: (message: string) => void
+  // Purely informational — no confirm/cancel choice, just something to acknowledge. Covers the
+  // three plain Alert.alert calls inside check() below (dev-mode disabled, web unsupported, and
+  // "you're already up to date") — none of them go through onConfirm, since there's no decision
+  // to make.
+  onInfo?: (title: string, message: string) => void
 }
 
 export interface UseUpdaterReturn {
@@ -22,10 +27,11 @@ export interface UseUpdaterReturn {
 const isUnsupported = () => __DEV__ || Platform.OS === 'web'
 
 export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn => {
-  const { autoCheck = true, autoPrompt = true, onConfirm, onError } = options
+  const { autoCheck = true, autoPrompt = true, onConfirm, onError, onInfo } = options
   const [checking, setChecking] = useState(false)
   const [updateReady, setUpdateReady] = useState(false)
   const checkingRef = useRef(false)
+  const autoCheckPendingRef = useRef(false)
   const appState = useRef(AppState.currentState)
   const stagedManifest = useRef<UpdateManifest | null>(null)
   // Read via refs inside the AppState listener so onConfirm/onError identity changes (e.g. an
@@ -39,6 +45,12 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
     if (!autoCheck || isUnsupported()) return
 
     const runAutoCheck = () => {
+      // Guards against overlapping fetches if AppState fires again (e.g. rapid app-switcher
+      // transitions) before a prior auto-check has resolved. Independent of checkingRef, which
+      // only guards the confirmation prompt and covers manual check() calls too.
+      if (autoCheckPendingRef.current) return
+      autoCheckPendingRef.current = true
+
       checkForUpdate()
         .then(async (manifest) => {
           if (!manifest) return
@@ -64,6 +76,9 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
           }
         })
         .catch(() => {})
+        .finally(() => {
+          autoCheckPendingRef.current = false
+        })
     }
 
     // Cold launch: run the same check+prompt flow as a foreground resume so update
@@ -82,11 +97,15 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
 
   const check = async (): Promise<void> => {
     if (__DEV__) {
-      Alert.alert('Updates unavailable', 'Update checks are disabled in development mode.')
+      const message = 'Update checks are disabled in development mode.'
+      if (onInfo) onInfo('Updates unavailable', message)
+      else Alert.alert('Updates unavailable', message)
       return
     }
     if (Platform.OS === 'web') {
-      Alert.alert('Updates unavailable', 'Update checks are not supported on web.')
+      const message = 'Update checks are not supported on web.'
+      if (onInfo) onInfo('Updates unavailable', message)
+      else Alert.alert('Updates unavailable', message)
       return
     }
     if (checkingRef.current) return
@@ -95,7 +114,9 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
     try {
       const manifest = stagedManifest.current ?? (await checkForUpdate())
       if (!manifest) {
-        Alert.alert('No update', 'You are on the most recent version.')
+        const message = 'You are on the most recent version.'
+        if (onInfo) onInfo('No update', message)
+        else Alert.alert('No update', message)
         return
       }
       const confirmFn = onConfirm ?? getUpdateConfirmation

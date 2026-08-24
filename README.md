@@ -55,6 +55,16 @@ const { check, checking } = useUpdater({
 })
 ```
 
+### With custom info alerts
+
+```tsx
+const { check, checking } = useUpdater({
+  onInfo: (title, message) => myInfoDialog(title, message),
+})
+```
+
+Covers `check()`'s three purely-informational cases — dev-mode disabled, web unsupported, and "you're already up to date" — none of which need a confirm/cancel choice, just something to acknowledge. Defaults to `Alert.alert` like `onError`.
+
 ### Disable automatic mount/foreground checks entirely
 
 ```tsx
@@ -83,6 +93,7 @@ interface UseUpdaterOptions {
   autoPrompt?: boolean                                   // default: true
   onConfirm?: (manifest: UpdateManifest) => Promise<boolean>
   onError?: (message: string) => void
+  onInfo?: (title: string, message: string) => void
 }
 
 interface UseUpdaterReturn {
@@ -96,8 +107,9 @@ interface UseUpdaterReturn {
 |--------|---------|-------------|
 | `autoCheck` | `true` | Fetches available updates once on mount and again via an `AppState` listener whenever the app comes to the foreground. Disable for apps that want full manual control. |
 | `autoPrompt` | `true` | When a mount or foreground `autoCheck` fetch finds an update, run the confirmation dialog (and reload on confirm) immediately. Set `false` to fall back to the old behavior — silently stage it for a manual `check()` or the next cold launch instead. Ignored if `autoCheck` is `false`. A manual `check()` call and an auto-prompt won't run concurrently — whichever is in flight blocks the other. |
-| `onConfirm` | — | Custom confirmation dialog. Receives the update manifest, must return `Promise<boolean>` — `true` to reload, `false` to cancel. Defaults to a native `Alert` showing the release date and metadata message. |
+| `onConfirm` | — | Custom confirmation dialog. Receives the update manifest, must return `Promise<boolean>` — `true` to reload, `false` to cancel. Defaults to a native `Alert` showing the release date. |
 | `onError` | — | Called with an error message string if `check()` throws. Defaults to `Alert.alert`. |
+| `onInfo` | — | Called with `(title, message)` for `check()`'s purely-informational cases (dev-mode disabled, web unsupported, no update found) — no confirm/cancel choice, just an acknowledgeable message. Defaults to `Alert.alert`. |
 
 | Return | Description |
 |--------|-------------|
@@ -158,6 +170,7 @@ The path argument defaults to `src/constants/release.ts` if omitted.
 - `autoPrompt`'s foreground flow shares that same `checkingRef` guard with `check()`, so a manual check and an auto-prompt can't both be mid-confirm at once
 - `updateReady` and the staged manifest ref are cleared in `finally` so they reset on both confirm and cancel
 - `onConfirm` replaces the default `Alert` entirely — useful in apps that have their own dialog primitive (e.g. a `select()` utility or bottom sheet)
+- `onInfo` is the same idea for `check()`'s three non-choice messages (dev-mode disabled, web unsupported, no update found) — separate from `onConfirm` because there's nothing to confirm, just something to show
 - No Provider or context required — the hook is self-contained
 
 ---

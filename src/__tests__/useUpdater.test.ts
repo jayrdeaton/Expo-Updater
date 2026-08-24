@@ -17,8 +17,7 @@ const mockAppState = AppState as MockAppState
 const alertAlert = Alert.alert as jest.Mock
 
 const mockManifest = {
-  createdAt: '2026-01-15T12:00:00.000Z',
-  metadata: { message: 'Bug fixes' }
+  createdAt: '2026-01-15T12:00:00.000Z'
 }
 
 beforeEach(() => {
@@ -53,6 +52,33 @@ describe('useUpdater', () => {
       expect(alertAlert).toHaveBeenCalledWith('No update', 'You are on the most recent version.')
     })
 
+    it('calls onInfo instead of the default Alert in dev mode', async () => {
+      g.__DEV__ = true
+      const onInfo = jest.fn()
+      const { result } = renderHook(() => useUpdater({ onInfo }))
+      await act(() => result.current.check())
+      expect(onInfo).toHaveBeenCalledWith('Updates unavailable', expect.stringContaining('development'))
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
+    it('calls onInfo instead of the default Alert on web', async () => {
+      ;(Platform as { OS: string }).OS = 'web'
+      const onInfo = jest.fn()
+      const { result } = renderHook(() => useUpdater({ onInfo }))
+      await act(() => result.current.check())
+      expect(onInfo).toHaveBeenCalledWith('Updates unavailable', expect.stringContaining('web'))
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
+    it('calls onInfo instead of the default Alert when no update is available', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      const onInfo = jest.fn()
+      const { result } = renderHook(() => useUpdater({ onInfo }))
+      await act(() => result.current.check())
+      expect(onInfo).toHaveBeenCalledWith('No update', 'You are on the most recent version.')
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
     it('shows confirmation dialog with manifest info when update is available', async () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
@@ -61,7 +87,7 @@ describe('useUpdater', () => {
       })
       const { result } = renderHook(() => useUpdater())
       await act(() => result.current.check())
-      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Bug fixes'), expect.any(Array))
+      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Restart app to update'), expect.any(Array))
     })
 
     it('calls reloadAsync when user confirms', async () => {
@@ -185,7 +211,7 @@ describe('useUpdater', () => {
       renderHook(() => useUpdater())
       await act(async () => {})
       expect(checkForUpdateAsync).toHaveBeenCalled()
-      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Bug fixes'), expect.any(Array))
+      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Restart app to update'), expect.any(Array))
     })
 
     it('reloads when the user confirms the mount-time prompt', async () => {
@@ -313,7 +339,7 @@ describe('useUpdater', () => {
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater())
       await act(async () => { mockAppState.__emit('active') })
-      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Bug fixes'), expect.any(Array))
+      expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Restart app to update'), expect.any(Array))
       unmount()
     })
 
