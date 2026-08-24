@@ -38,8 +38,11 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
   // inline arrow function) don't tear down and re-subscribe the listener on every render.
   const onConfirmRef = useRef(onConfirm)
   const onErrorRef = useRef(onError)
-  onConfirmRef.current = onConfirm
-  onErrorRef.current = onError
+
+  useEffect(() => {
+    onConfirmRef.current = onConfirm
+    onErrorRef.current = onError
+  })
 
   useEffect(() => {
     if (!autoCheck || isUnsupported()) return
