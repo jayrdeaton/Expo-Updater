@@ -1,61 +1,9 @@
 const { defineConfig } = require('eslint/config')
-const prettierRecommended = require('eslint-plugin-prettier/recommended')
-const simpleImportSort = require('eslint-plugin-simple-import-sort')
-const tsParser = require('@typescript-eslint/parser')
-const eslintReactNative = require('eslint-plugin-react-native')
-const reactHooks = require('eslint-plugin-react-hooks')
-const tsEslint = require('typescript-eslint')
-const packageJson = require('eslint-plugin-package-json')
+const base = require('@infinitetoken/eslint-config/react-native')
 
 module.exports = defineConfig([
+  ...base,
   {
-    files: ['**/*.ts', '**/*.tsx'],
-    languageOptions: {
-      parser: tsParser,
-      parserOptions: {
-        project: './tsconfig.json'
-      }
-    }
-  },
-  {
-    ignores: ['dist/**', 'node_modules/**', 'lib/**', 'coverage/**', '**/*.js', '**/*.mjs', '**/*.cjs', 'src/__mocks__/**', 'src/__tests__/**']
-  },
-  ...tsEslint.configs.recommended,
-  prettierRecommended,
-  packageJson.configs.recommended,
-  {
-    extends: [packageJson.configs.recommended],
-    files: ['package.json'],
-    rules: {
-      'package-json/order-properties': 'warn',
-      'package-json/sort-collections': 'warn'
-    }
-  },
-  {
-    plugins: {
-      'react-hooks': reactHooks,
-      'react-native': eslintReactNative,
-      'simple-import-sort': simpleImportSort
-    },
-    rules: {
-      'prettier/prettier': 'warn',
-      'simple-import-sort/imports': 'warn',
-      'simple-import-sort/exports': 'warn',
-      'no-console': 'warn',
-      'react-native/no-inline-styles': 'warn',
-      'react-native/no-unused-styles': 'warn',
-      'react-native/no-raw-text': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn',
-      '@typescript-eslint/no-require-imports': 'off',
-      // rules-of-hooks stays at error — it's the foundational hook-ordering check, not a judgment
-      // call. The rest match @tastic/hud's severities (warn, not error) — see that repo's
-      // eslint.config.cjs for the reasoning behind refs/set-state-in-effect specifically.
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
-      'react-hooks/refs': 'warn',
-      'react-hooks/immutability': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/set-state-in-effect': 'warn'
-    }
+    ignores: ['**/*.cjs', 'src/__mocks__/**', 'src/__tests__/**']
   }
 ])
