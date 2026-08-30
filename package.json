@@ -34,7 +34,7 @@
   "react-native": "src/index.ts",
   "types": "dist/index.d.ts",
   "bin": {
-    "rific-bump-ota": "./scripts/bump-ota-version.mjs"
+    "rific-bump-ota": "./scripts/bump-ota-version.cjs"
   },
   "files": [
     "dist",
@@ -44,9 +44,8 @@
     "!src/__mocks__"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "build:watch": "tsup src/index.ts --format cjs,esm --dts --watch",
-    "ci": "npm run lint && npm test && npm run typecheck && npm run build",
+    "build": "tsup",
+    "build:watch": "tsup --watch",
     "fix": "eslint --fix",
     "lint": "eslint",
     "prepublishOnly": "npm run build",
@@ -57,12 +56,14 @@
     "test": "jest",
     "test:watch": "jest --watchAll",
     "typecheck": "tsc --noEmit",
-    "preversion": "npm run ci"
+    "verify": "npm run lint && npm test && npm run typecheck && npm run build",
+    "preversion": "npm run verify"
   },
   "prettier": "@infinitetoken/eslint-config/prettier",
   "devDependencies": {
-    "@infinitetoken/eslint-config": "^0.1.4",
-    "@infinitetoken/tsconfig": "^0.1.1",
+    "@infinitetoken/eslint-config": "^0.1.8",
+    "@infinitetoken/jest-config": "^0.2.0",
+    "@infinitetoken/tsconfig": "^0.3.0",
     "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
     "@types/react": "^19.0.0",
@@ -75,7 +76,6 @@
     "prettier": "^3.8.3",
     "react": "^19.2.6",
     "react-native": "^0.85.3",
-    "ts-jest": "^29.4.9",
     "tsup": "^8.0.0",
     "typescript": "~6.0.3"
   },

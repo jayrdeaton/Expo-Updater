@@ -1,5 +1,4 @@
 import { act, renderHook } from '@testing-library/react'
-
 import { checkForUpdateAsync, fetchUpdateAsync, reloadAsync } from 'expo-updates'
 import { Alert, AppState, Platform } from 'react-native'
 
@@ -121,7 +120,9 @@ describe('useUpdater', () => {
       // foreground fetch staged, which only sits around waiting for reuse when autoPrompt isn't
       // already consuming it immediately.
       const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.updateReady).toBe(true)
 
       jest.clearAllMocks()
@@ -138,7 +139,9 @@ describe('useUpdater', () => {
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
       const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.updateReady).toBe(true)
 
       alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
@@ -270,7 +273,9 @@ describe('useUpdater', () => {
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: false }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(checkForUpdateAsync).toHaveBeenCalled()
       expect(result.current.updateReady).toBe(true)
       expect(alertAlert).not.toHaveBeenCalled()
@@ -281,7 +286,9 @@ describe('useUpdater', () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater())
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.updateReady).toBe(false)
       unmount()
     })
@@ -290,7 +297,9 @@ describe('useUpdater', () => {
       g.__DEV__ = true
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater())
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(checkForUpdateAsync).not.toHaveBeenCalled()
       unmount()
     })
@@ -299,7 +308,9 @@ describe('useUpdater', () => {
       ;(Platform as { OS: string }).OS = 'web'
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater())
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(checkForUpdateAsync).not.toHaveBeenCalled()
       unmount()
     })
@@ -326,7 +337,9 @@ describe('useUpdater', () => {
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: false }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.updateReady).toBe(true)
       expect(alertAlert).not.toHaveBeenCalled()
       expect(reloadAsync).not.toHaveBeenCalled()
@@ -338,7 +351,9 @@ describe('useUpdater', () => {
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater())
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(alertAlert).toHaveBeenCalledWith('Update available', expect.stringContaining('Restart app to update'), expect.any(Array))
       unmount()
     })
@@ -352,7 +367,9 @@ describe('useUpdater', () => {
       })
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater({ autoPrompt: true }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(reloadAsync).toHaveBeenCalled()
       unmount()
     })
@@ -365,7 +382,9 @@ describe('useUpdater', () => {
       })
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(reloadAsync).not.toHaveBeenCalled()
       expect(result.current.updateReady).toBe(false)
       unmount()
@@ -377,7 +396,9 @@ describe('useUpdater', () => {
       const onConfirm = jest.fn().mockResolvedValue(false)
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(onConfirm).toHaveBeenCalledWith(mockManifest)
       expect(alertAlert).not.toHaveBeenCalledWith('Update available', expect.any(String), expect.any(Array))
       unmount()
@@ -390,7 +411,9 @@ describe('useUpdater', () => {
       const onError = jest.fn()
       mockAppState.__setCurrentState('background')
       const { unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm, onError }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(onError).toHaveBeenCalledWith('Confirm failed')
       unmount()
     })
@@ -402,9 +425,13 @@ describe('useUpdater', () => {
       const onConfirm = jest.fn().mockReturnValue(new Promise((res) => (resolveConfirm = res)))
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.checking).toBe(true)
-      await act(async () => { resolveConfirm(false) })
+      await act(async () => {
+        resolveConfirm(false)
+      })
       expect(result.current.checking).toBe(false)
       unmount()
     })
@@ -416,7 +443,9 @@ describe('useUpdater', () => {
       const onConfirm = jest.fn().mockReturnValue(new Promise((res) => (resolveConfirm = res)))
       mockAppState.__setCurrentState('background')
       const { result, unmount } = renderHook(() => useUpdater({ autoPrompt: true, onConfirm }))
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(result.current.checking).toBe(true)
 
       jest.clearAllMocks()
@@ -424,7 +453,9 @@ describe('useUpdater', () => {
       expect(checkForUpdateAsync).not.toHaveBeenCalled()
       expect(onConfirm).not.toHaveBeenCalled()
 
-      await act(async () => { resolveConfirm(false) })
+      await act(async () => {
+        resolveConfirm(false)
+      })
       unmount()
     })
 
@@ -441,7 +472,9 @@ describe('useUpdater', () => {
 
       // Let the manual check's fetch resolve so it reaches the (never-resolving, default-mock)
       // confirm dialog — checkingRef stays true throughout since no button gets pressed.
-      await act(async () => { resolveCheckFetch({ isAvailable: true }) })
+      await act(async () => {
+        resolveCheckFetch({ isAvailable: true })
+      })
       expect(alertAlert).toHaveBeenCalledTimes(1)
       expect(result.current.checking).toBe(true)
 
@@ -450,7 +483,9 @@ describe('useUpdater', () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       alertAlert.mockClear()
       mockAppState.__setCurrentState('background')
-      await act(async () => { mockAppState.__emit('active') })
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
       expect(alertAlert).not.toHaveBeenCalled()
 
       unmount()

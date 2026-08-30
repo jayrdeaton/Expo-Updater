@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
-import { execSync } from 'node:child_process'
-import fs from 'node:fs'
-import path from 'node:path'
+const { execSync } = require('node:child_process')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const filePath = process.argv[2] ?? 'src/constants/release.ts'
 const configPath = path.resolve(process.cwd(), filePath)

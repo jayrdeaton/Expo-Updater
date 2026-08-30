@@ -1,17 +1,9 @@
 {
-  "extends": "@infinitetoken/tsconfig/tsconfig.json",
+  "extends": "@infinitetoken/tsconfig/react-native",
   "compilerOptions": {
-    "target": "ES2020",
-    "lib": ["ES2020"],
-    "jsx": "react-jsx",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "allowSyntheticDefaultImports": true,
-    "resolveJsonModule": true
+    // Deliberately no DOM lib: this is a headless Expo/RN hook package with no
+    // web/browser target. Fleet default for /react-native adds DOM; kept off here.
+    "lib": ["ES2020"]
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/__mocks__", "src/__tests__"]
+  "include": ["src"]
 }
