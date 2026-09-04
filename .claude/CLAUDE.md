@@ -50,6 +50,7 @@ src/
     useUpdater.test.ts        - 38 tests, covers both mocks
 scripts/
   bump-ota-version.cjs      - standalone CLI, see "Bump script" below
+  build-local.cjs           - standalone CLI, see "Build script" below
 ```
 
 ### Update flow
@@ -65,6 +66,16 @@ Auto-check runs once on mount (cold launch) and again on every `inactive|backgro
 `scripts/bump-ota-version.cjs` ships as the `rific-bump-ota` bin. It bumps an `otaVersion: N` constant in a consumer repo's own file (default `src/constants/release.ts`, overridable via argv) and auto-commits the change — refuses to run on a dirty git tree first. Unrelated to the hook itself; a small utility for OTA-version bookkeeping in the app that consumes this package.
 
 Originally `.mjs`, since it used `import`/`export` syntax while the rest of the package is `"type": "commonjs"` — genuinely required at the time, not a style choice (verified: renaming to plain `.js` under this package's explicit `"type"` throws `SyntaxError: Cannot use import statement outside a module`, and `.cjs` can't hold ESM syntax either). Converted to real CommonJS (`require()`/no top-level `import`) and renamed to `.cjs` instead, matching the fleet's convention — every import here is a Node builtin (`node:child_process`, `node:fs`, `node:path`), all fully `require()`-compatible, and nothing in the script depends on an ESM-only feature (no `import.meta`, no top-level `await`, no dynamic `import()`), so there was no actual blocker to rewriting it rather than keeping the extension mismatch.
+
+### Build script
+
+`scripts/build-local.cjs` ships as the `rific-build-local` bin. Wraps `expo prebuild --clean && eas build --profile <profile> --local` (profile defaults to `development`, overridable via `rific-build-local <profile>`) for a consumer app, then relocates the resulting artifact out of the project root into `~/Downloads/Builds/<expo.name>-<local-timestamp>.<ext>` — one shared, browsable location across every app that depends on this package, instead of each app scattering its own `build-<epoch-ms>.<ext>` file in its own root (eas-cli's upstream default with no `--output` flag).
+
+Deliberately does *not* pass `eas build`'s own `--output` flag to control this: `--output` needs a full static path fixed before the build runs, which would mean either forcing `--platform` up front (removing the interactive iOS/Android prompt every consumer currently gets) or predicting the real output extension ourselves — and `eas-cli-local-build-plugin` copies whatever `--output` says with no validation that the extension actually matches the artifact, so a wrong guess silently mislabels the file (e.g. an `.aab` copied into a file named `.apk`). Instead, the build runs exactly as it always has (interactive prompt included), and afterward the script finds the `build-<epoch>.<ext>` file the plugin just wrote — self-identifying via the epoch already in its own filename — and moves it. Uses `fs.copyFileSync` + `fs.unlinkSync` rather than `fs.renameSync`, so it can't fail with `EXDEV` if the project directory and `~/Downloads` ever end up on different volumes.
+
+Reads the project name from `app.json`'s `expo.name`, not `package.json`'s `name` — the latter is inconsistently formatted across consumer apps (e.g. `"box-hockey"` vs. the app's actual name `"BoxHockey"`), while `expo.name` consistently matches the app's real, human-facing name.
+
+Unrelated to the hook itself, same as the bump script above — a small utility for local-build bookkeeping in the app that consumes this package.
 
 ## Public API
 

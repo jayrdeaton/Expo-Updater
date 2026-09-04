@@ -34,7 +34,8 @@
   "react-native": "src/index.ts",
   "types": "dist/index.d.ts",
   "bin": {
-    "rific-bump-ota": "./scripts/bump-ota-version.cjs"
+    "rific-bump-ota": "./scripts/bump-ota-version.cjs",
+    "rific-build-local": "./scripts/build-local.cjs"
   },
   "files": [
     "dist",
