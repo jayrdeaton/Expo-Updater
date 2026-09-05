@@ -35,7 +35,8 @@
   "types": "dist/index.d.ts",
   "bin": {
     "rific-bump-ota": "./scripts/bump-ota-version.cjs",
-    "rific-build-local": "./scripts/build-local.cjs"
+    "rific-updater-build": "./scripts/build.cjs",
+    "rific-updater-update": "./scripts/update.cjs"
   },
   "files": [
     "dist",
