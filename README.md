@@ -163,6 +163,56 @@ The path argument defaults to `src/constants/release.ts` if omitted.
 
 ---
 
+## Build & update scripts
+
+This package also ships two CLI bins that replace a consuming app's own
+`build:development`/`build:preview`/`build:production` and
+`update:development`/`update:preview`/`update:production` npm scripts — one bare script each, not one
+per profile:
+
+```json
+"scripts": {
+  "build": "rific-updater-build",
+  "update": "rific-updater-update"
+}
+```
+
+```sh
+npm run build development   # local: expo prebuild --clean && eas build --profile development --local, artifact moved to ~/Downloads/Builds/
+npm run build preview       # cloud: eas build --profile preview
+npm run build production    # cloud: eas build --profile production
+
+npm run update development  # eas update --branch development --environment development --message "<last commit message>"
+npm run update preview      # same, plus --non-interactive
+npm run update production   # same, plus --non-interactive
+```
+
+`development` is the one profile that behaves differently (local build, interactive update) — every
+other profile name is treated the same (cloud build, non-interactive update). Run either bin with no
+profile argument to print this convention.
+
+### Verify-gating lives in the CLI, not in `package.json`
+
+**`rific-updater-build` and `rific-updater-update` both run the consuming app's own `npm run verify`
+as their first step, before any build/update logic proceeds.** This is the *only* place the gate
+lives. There is no `npm run verify && ` prefix on any app's `build:*`/`update:*` script, and none is
+needed — those per-profile scripts don't exist in a consuming app's `package.json` at all once it's on
+these bins; there's just the one bare `build`/`update` script shown above, and the verify call happens
+inside this package's own `scripts/lib/runVerify.cjs`, shared by both.
+
+If the app's `package.json` has a `verify` script, that's what runs (`npm run verify`, whatever it
+composes — lint/test/typecheck, or more). If it doesn't, `runVerify` falls back to running `lint`,
+`test`, and `typecheck` individually, warning and skipping any of those three that's also missing,
+rather than failing the whole run.
+
+If you're looking for the gate as a `npm run verify && ` prefix on a `build:development`/
+`update:production`-style script somewhere in an app's `package.json` — it's not there, and shouldn't
+be added. That per-script prefixing pattern predates `rific-updater-build`/`rific-updater-update` and
+no longer applies to any app using them; describing it that way in an app's own docs is describing a
+mechanism this package replaced.
+
+---
+
 ## Context / design notes
 
 - Named `@rific/updater` (not `expo-updater`) to avoid confusion with the `expo-updates` peer dependency
@@ -177,12 +227,12 @@ The path argument defaults to `src/constants/release.ts` if omitted.
 
 ## Consuming apps
 
-> **0.3.0 changed the default:** `autoPrompt` now defaults to `true`, so a bare `useUpdater()` prompts on its own the moment a foreground fetch finds something — it no longer just stages silently for next launch. Every app below was written against the old silent-by-default behavior; pass `autoPrompt: false` explicitly if that's still what you want (this is what Lumber's and CashierFu-Utility's manual-check hooks already do via `autoCheck: false`, so they're unaffected — it's the bare root-layout `useUpdater()` calls and the games that actually change behavior on upgrade).
+> **0.3.0 changed the default:** `autoPrompt` now defaults to `true`, so a bare `useUpdater()` prompts on its own the moment a foreground fetch finds something — it no longer just stages silently for next launch. Every app below was written against the old silent-by-default behavior; pass `autoPrompt: false` explicitly if that's still what you want (this is what Lumber's and Utility's manual-check hooks already do via `autoCheck: false`, so they're unaffected — it's the bare root-layout `useUpdater()` calls and the games that actually change behavior on upgrade).
 >
 > **Next release adds a mount-time check:** `autoCheck` now also fetches once on mount, in addition to the existing foreground `AppState` listener — covering cold launch, which previously only got an update via native `expo-updates` (`checkAutomatically`), silently and outside this hook's confirm/reload flow. Any app with a bare root-layout `useUpdater()` (default `autoPrompt: true`) will now show the confirm dialog on cold launch too, not just on foreground return.
 
 - **Lumber** (`../Lumber`) — account screen, shows version + update badge. Root layout's bare `useUpdater()` will start auto-prompting on upgrade unless changed.
-- **CashierFu-Utility** (`../CashierFu-Utility`) — settings modal, uses `@rific/toaster` for `onError`. Same root-layout caveat as Lumber.
+- **Utility** (`../Utility`) — settings modal, uses `@rific/toaster` for `onError`. Same root-layout caveat as Lumber.
 - **Swirlio** (`../Swirlio`) — top sheet; now just relies on the `autoPrompt` default rather than passing it explicitly.
 - Games (Setter, Hangman, Crumby, HexFleet, etc.) — call `useUpdater()` with no options, relying on the old silent-only default. Will start prompting on cold launch and on foreground return (not during active play — the listener only fires on a background→active transition) unless given `autoPrompt: false`.
 
