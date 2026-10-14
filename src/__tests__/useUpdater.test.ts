@@ -116,7 +116,7 @@ describe('useUpdater', () => {
       ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
       ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
       mockAppState.__setCurrentState('background')
-      // autoPrompt: false — this test is about check() reusing a manifest a prior silent
+      // autoPrompt: false - this test is about check() reusing a manifest a prior silent
       // foreground fetch staged, which only sits around waiting for reuse when autoPrompt isn't
       // already consuming it immediately.
       const { result } = renderHook(() => useUpdater({ autoPrompt: false }))
@@ -471,7 +471,7 @@ describe('useUpdater', () => {
       expect(result.current.checking).toBe(true)
 
       // Let the manual check's fetch resolve so it reaches the (never-resolving, default-mock)
-      // confirm dialog — checkingRef stays true throughout since no button gets pressed.
+      // confirm dialog - checkingRef stays true throughout since no button gets pressed.
       await act(async () => {
         resolveCheckFetch({ isAvailable: true })
       })

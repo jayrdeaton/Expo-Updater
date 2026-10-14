@@ -21,7 +21,7 @@ validateProfile(profile, cwd)
 runVerify(cwd)
 
 // Captured before bumpOtaVersion's own auto-commit, so this is the app's real
-// last commit — not the "otaVersion N -> N+1" commit bumpOtaVersion is about to make.
+// last commit - not the "otaVersion N -> N+1" commit bumpOtaVersion is about to make.
 const message = execSync('git log -1 --pretty=%B', { cwd }).toString().trim()
 
 bumpOtaVersion(releaseFile, cwd)

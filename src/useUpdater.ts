@@ -11,9 +11,9 @@ export interface UseUpdaterOptions {
   autoPrompt?: boolean
   onConfirm?: (manifest: UpdateManifest) => Promise<boolean>
   onError?: (message: string) => void
-  // Purely informational — no confirm/cancel choice, just something to acknowledge. Covers the
+  // Purely informational - no confirm/cancel choice, just something to acknowledge. Covers the
   // three plain Alert.alert calls inside check() below (dev-mode disabled, web unsupported, and
-  // "you're already up to date") — none of them go through onConfirm, since there's no decision
+  // "you're already up to date") - none of them go through onConfirm, since there's no decision
   // to make.
   onInfo?: (title: string, message: string) => void
 }
