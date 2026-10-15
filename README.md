@@ -129,87 +129,12 @@ interface UseUpdaterReturn {
 
 ---
 
-## OTA version constant
+## Builds and OTA updates
 
-Each app maintains a local integer version displayed to users (separate from the semver app version). Bump it before pushing an OTA:
-
-```sh
-# from your app's root
-npx rific-bump-ota src/constants/release.ts
-```
-
-Or add to your app's `package.json`:
-
-```json
-"scripts": {
-  "update:bump": "rific-bump-ota src/constants/release.ts"
-}
-```
-
-The script:
-- Verifies git working directory is clean
-- Increments `otaVersion` in the target file
-- Auto-commits `"otaVersion N -> N+1"`
-
-File format expected (TypeScript or JS object literal):
-
-```ts
-export const release = {
-  otaVersion: 1
-}
-```
-
-The path argument defaults to `src/constants/release.ts` if omitted.
-
----
-
-## Build & update scripts
-
-This package also ships two CLI bins that replace a consuming app's own
-`build:development`/`build:preview`/`build:production` and
-`update:development`/`update:preview`/`update:production` npm scripts - one bare script each, not one
-per profile:
-
-```json
-"scripts": {
-  "build": "rific-updater-build",
-  "update": "rific-updater-update"
-}
-```
-
-```sh
-npm run build development   # local: expo prebuild --clean && eas build --profile development --local, artifact moved to ~/Downloads/Builds/
-npm run build preview       # cloud: eas build --profile preview
-npm run build production    # cloud: eas build --profile production
-
-npm run update development  # eas update --branch development --environment development --message "<last commit message>"
-npm run update preview      # same, plus --non-interactive
-npm run update production   # same, plus --non-interactive
-```
-
-`development` is the one profile that behaves differently (local build, interactive update) - every
-other profile name is treated the same (cloud build, non-interactive update). Run either bin with no
-profile argument to print this convention.
-
-### Verify-gating lives in the CLI, not in `package.json`
-
-**`rific-updater-build` and `rific-updater-update` both run the consuming app's own `npm run verify`
-as their first step, before any build/update logic proceeds.** This is the *only* place the gate
-lives. There is no `npm run verify && ` prefix on any app's `build:*`/`update:*` script, and none is
-needed - those per-profile scripts don't exist in a consuming app's `package.json` at all once it's on
-these bins; there's just the one bare `build`/`update` script shown above, and the verify call happens
-inside this package's own `scripts/lib/runVerify.cjs`, shared by both.
-
-If the app's `package.json` has a `verify` script, that's what runs (`npm run verify`, whatever it
-composes - lint/test/typecheck, or more). If it doesn't, `runVerify` falls back to running `lint`,
-`test`, and `typecheck` individually, warning and skipping any of those three that's also missing,
-rather than failing the whole run.
-
-If you're looking for the gate as a `npm run verify && ` prefix on a `build:development`/
-`update:production`-style script somewhere in an app's `package.json` - it's not there, and shouldn't
-be added. That per-script prefixing pattern predates `rific-updater-build`/`rific-updater-update` and
-no longer applies to any app using them; describing it that way in an app's own docs is describing a
-mechanism this package replaced.
+This package is only the update hook. It used to ship `rific-updater-build`, `rific-updater-update` and
+`rific-bump-ota` bins; 0.7.0 removed them. A consuming app's `build` and `update` npm scripts are plain
+`eas build` and `eas update`, and the verify-gated build, update and `otaVersion` bump flow lives in
+Jay's own CLI (`jrd ship build <profile>`, `jrd ship update <profile>`, `jrd ship bump-ota`).
 
 ---
 
