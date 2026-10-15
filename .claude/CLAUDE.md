@@ -52,7 +52,7 @@ src/
 
 ## Build and update tooling: removed in 0.7.0
 
-This package used to ship `rific-updater-build`, `rific-updater-update` and `rific-bump-ota` bins (`scripts/`). They moved to Jay's own CLI, `jrd ship` (`@jayrdeaton/scripts`, `~/Developer/Scripts`), in October 2026, and 0.7.0 deleted them: apps' `build`/`update` scripts are plain `eas build`/`eas update`. Their design history (the `prebuild` hook collision, profile-derived local/cloud and `--non-interactive`, capturing the commit message before the OTA bump) is in this repo's git history and carries over to `jrd ship`. Don't add CLI tooling back here: the package is just the OTA update hook its description says it is.
+This package used to ship `rific-updater-build`, `rific-updater-update` and `rific-bump-ota` bins (`scripts/`). 0.7.0 (2026-10-15) deleted them: apps' `build`/`update` scripts are plain `eas build`/`eas update`. Their design history (the `prebuild` hook collision, profile-derived local/cloud and `--non-interactive`, capturing the commit message before the OTA bump) is in this repo's git history. Don't add CLI tooling back here: the package is just the OTA update hook its description says it is.
 
 ### Update flow
 

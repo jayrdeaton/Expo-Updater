@@ -132,9 +132,9 @@ interface UseUpdaterReturn {
 ## Builds and OTA updates
 
 This package is only the update hook. It used to ship `rific-updater-build`, `rific-updater-update` and
-`rific-bump-ota` bins; 0.7.0 removed them. A consuming app's `build` and `update` npm scripts are plain
-`eas build` and `eas update`, and the verify-gated build, update and `otaVersion` bump flow lives in
-Jay's own CLI (`jrd ship build <profile>`, `jrd ship update <profile>`, `jrd ship bump-ota`).
+`rific-bump-ota` bins; 0.7.0 removed them. Build and publish with EAS directly (`eas build`,
+`eas update`), and bump your app's own OTA version constant, if it shows one, in the commit you
+publish.
 
 ---
 
