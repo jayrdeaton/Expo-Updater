@@ -1,14 +1,19 @@
-import { reloadAsync } from 'expo-updates'
+import { checkAutomatically, reloadAsync } from 'expo-updates'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, AppState, AppStateStatus, Platform } from 'react-native'
 
 import { checkForUpdate } from './checkForUpdate'
 import { getUpdateConfirmation } from './getUpdateConfirmation'
+import { type ExpoNetworkModule, isUnmetered } from './network'
 import { UpdateManifest } from './types'
 
 export interface UseUpdaterOptions {
   autoCheck?: boolean
   autoPrompt?: boolean
+  // `import * as ExpoNetwork from 'expo-network'`. Only read when the app's `updates.checkAutomatically`
+  // is WIFI_ONLY: the auto-check then fetches only on Wi-Fi, and again when Wi-Fi comes back. Omit it
+  // there and this hook makes no auto-checks at all, leaving expo-updates' own Wi-Fi-only launch check.
+  expoNetwork?: ExpoNetworkModule
   onConfirm?: (manifest: UpdateManifest) => Promise<boolean>
   onError?: (message: string) => void
   // Purely informational - no confirm/cancel choice, just something to acknowledge. Covers the
@@ -27,7 +32,7 @@ export interface UseUpdaterReturn {
 const isUnsupported = () => __DEV__ || Platform.OS === 'web'
 
 export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn => {
-  const { autoCheck = true, autoPrompt = true, onConfirm, onError, onInfo } = options
+  const { autoCheck = true, autoPrompt = true, expoNetwork, onConfirm, onError, onInfo } = options
   const [checking, setChecking] = useState(false)
   const [updateReady, setUpdateReady] = useState(false)
   const checkingRef = useRef(false)
@@ -47,19 +52,43 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
   useEffect(() => {
     if (!autoCheck || isUnsupported()) return
 
-    const runAutoCheck = () => {
+    // The app's own app.json `updates.checkAutomatically`, which expo-updates only applies to its
+    // native launch check: read here too so one setting covers this hook's checks as well. NEVER and
+    // ON_ERROR_RECOVERY leave updates to a manual check(). ON_LOAD, and null (expo-updates
+    // disabled), keep the checks on any network.
+    const policy: string | null = checkAutomatically
+    if (policy === 'NEVER' || policy === 'ON_ERROR_RECOVERY') return
+    const wifiOnly = policy === 'WIFI_ONLY'
+    if (wifiOnly && !expoNetwork) return
+    const network = wifiOnly ? expoNetwork : undefined
+    // Last known connection, so a change to Wi-Fi can tell it came from somewhere else. Unknown
+    // until the first check reads it.
+    let onWifi: boolean | undefined
+
+    const mayFetch = async () => {
+      if (!network) return true
+      onWifi = isUnmetered(await network.getNetworkStateAsync())
+      return onWifi
+    }
+
+    // `prompt` is false for a check Wi-Fi coming back starts, which can land in the middle of
+    // whatever someone is doing: it only stages the update, and the next foreground shows it.
+    const runAutoCheck = (prompt: boolean) => {
       // Guards against overlapping fetches if AppState fires again (e.g. rapid app-switcher
       // transitions) before a prior auto-check has resolved. Independent of checkingRef, which
       // only guards the confirmation prompt and covers manual check() calls too.
       if (autoCheckPendingRef.current) return
       autoCheckPendingRef.current = true
 
-      checkForUpdate()
+      mayFetch()
+        // Off Wi-Fi, or when a fetch finds nothing new, an update an earlier fetch already staged
+        // still gets its prompt: showing it costs no data.
+        .then(async (allowed) => (allowed ? await checkForUpdate() : null) ?? stagedManifest.current)
         .then(async (manifest) => {
           if (!manifest) return
           stagedManifest.current = manifest
           setUpdateReady(true)
-          if (!autoPrompt || checkingRef.current) return
+          if (!prompt || checkingRef.current) return
 
           checkingRef.current = true
           setChecking(true)
@@ -86,17 +115,29 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
 
     // Cold launch: run the same check+prompt flow as a foreground resume so update
     // discovery is consistent regardless of how the app was started.
-    runAutoCheck()
+    runAutoCheck(autoPrompt)
 
     const subscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
       if (/inactive|background/.test(appState.current) && nextState === 'active') {
-        runAutoCheck()
+        runAutoCheck(autoPrompt)
       }
       appState.current = nextState
     })
 
-    return () => subscription.remove()
-  }, [autoCheck, autoPrompt])
+    // Fetches what was skipped off Wi-Fi as soon as Wi-Fi is back, rather than waiting for the next
+    // foreground. Only from a known non-Wi-Fi connection (a check still reading it covers the
+    // rest), and only while the app is open: backgrounded, the foreground check does it.
+    const networkSubscription = network?.addNetworkStateListener((state) => {
+      const wasOnWifi = onWifi
+      onWifi = isUnmetered(state)
+      if (onWifi && wasOnWifi === false && AppState.currentState === 'active') runAutoCheck(false)
+    })
+
+    return () => {
+      subscription.remove()
+      networkSubscription?.remove()
+    }
+  }, [autoCheck, autoPrompt, expoNetwork])
 
   const check = async (): Promise<void> => {
     if (__DEV__) {

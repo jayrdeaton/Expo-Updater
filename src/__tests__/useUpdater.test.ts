@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import * as Updates from 'expo-updates'
 import { checkForUpdateAsync, fetchUpdateAsync, reloadAsync } from 'expo-updates'
 import { Alert, AppState, Platform } from 'react-native'
 
@@ -19,9 +20,46 @@ const mockManifest = {
   createdAt: '2026-01-15T12:00:00.000Z'
 }
 
+const setCheckAutomatically = (Updates as unknown as { __setCheckAutomatically: (value: string | null) => void }).__setCheckAutomatically
+
+// Stands in for `import * as ExpoNetwork from 'expo-network'`, which the hook takes as an option
+// rather than importing, so it's a plain fake here instead of a module mock.
+type NetworkListener = (state: { type?: string }) => void
+const networkListeners: NetworkListener[] = []
+let networkType = 'WIFI'
+const expoNetwork = {
+  getNetworkStateAsync: jest.fn(async () => ({ type: networkType })),
+  addNetworkStateListener: jest.fn((listener: NetworkListener) => {
+    networkListeners.push(listener)
+    return {
+      remove: jest.fn(() => {
+        networkListeners.splice(networkListeners.indexOf(listener), 1)
+      })
+    }
+  })
+}
+const setNetwork = (type: string) => {
+  networkType = type
+  networkListeners.forEach((listener) => listener({ type }))
+}
+
+const updateAvailable = () => {
+  ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: true })
+  ;(fetchUpdateAsync as jest.Mock).mockResolvedValue({ manifest: mockManifest })
+}
+
+const pressCancel = () => {
+  alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+    buttons[0].onPress()
+  })
+}
+
 beforeEach(() => {
   jest.clearAllMocks()
   mockAppState.__clearListeners()
+  networkListeners.length = 0
+  networkType = 'WIFI'
+  setCheckAutomatically('ON_LOAD')
   ;(Platform as { OS: string }).OS = 'ios'
   g.__DEV__ = false
 })
@@ -489,6 +527,183 @@ describe('useUpdater', () => {
       expect(alertAlert).not.toHaveBeenCalled()
 
       unmount()
+    })
+  })
+
+  describe('checkAutomatically', () => {
+    it('makes no auto-checks under NEVER, but a manual check still fetches', async () => {
+      setCheckAutomatically('NEVER')
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      const { result } = renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+      expect(AppState.addEventListener).not.toHaveBeenCalled()
+      await act(() => result.current.check())
+      expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    it('makes no auto-checks under ON_ERROR_RECOVERY', async () => {
+      setCheckAutomatically('ON_ERROR_RECOVERY')
+      updateAvailable()
+      mockAppState.__setCurrentState('background')
+      renderHook(() => useUpdater())
+      await act(async () => {
+        mockAppState.__emit('active')
+      })
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+      expect(alertAlert).not.toHaveBeenCalled()
+    })
+
+    it('checks on any network under ON_LOAD without reading the network', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      networkType = 'CELLULAR'
+      renderHook(() => useUpdater({ expoNetwork }))
+      await act(async () => {})
+      expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+      expect(expoNetwork.getNetworkStateAsync).not.toHaveBeenCalled()
+      expect(expoNetwork.addNetworkStateListener).not.toHaveBeenCalled()
+    })
+
+    it('treats no setting (expo-updates disabled) like ON_LOAD', async () => {
+      setCheckAutomatically(null)
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+    })
+
+    describe('WIFI_ONLY', () => {
+      beforeEach(() => {
+        setCheckAutomatically('WIFI_ONLY')
+      })
+
+      it('makes no auto-checks without expoNetwork, but a manual check still fetches', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        const { result } = renderHook(() => useUpdater())
+        await act(async () => {})
+        expect(checkForUpdateAsync).not.toHaveBeenCalled()
+        expect(AppState.addEventListener).not.toHaveBeenCalled()
+        await act(() => result.current.check())
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+      })
+
+      it('fetches and prompts on mount on Wi-Fi', async () => {
+        updateAvailable()
+        pressCancel()
+        renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+        expect(alertAlert).toHaveBeenCalledWith('Update available', expect.any(String), expect.any(Array))
+      })
+
+      it('counts Ethernet as Wi-Fi', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        networkType = 'ETHERNET'
+        renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+      })
+
+      it('does not fetch on mount or foreground over cellular', async () => {
+        updateAvailable()
+        networkType = 'CELLULAR'
+        const { result } = renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {
+          mockAppState.__emit('background')
+          mockAppState.__emit('active')
+        })
+        expect(expoNetwork.getNetworkStateAsync).toHaveBeenCalled()
+        expect(checkForUpdateAsync).not.toHaveBeenCalled()
+        expect(result.current.updateReady).toBe(false)
+        expect(alertAlert).not.toHaveBeenCalled()
+      })
+
+      it('still fetches on a manual check over cellular', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        networkType = 'CELLULAR'
+        const { result } = renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        await act(() => result.current.check())
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+        expect(alertAlert).toHaveBeenCalledWith('No update', 'You are on the most recent version.')
+      })
+
+      it('fetches and stages without prompting when Wi-Fi comes back while open', async () => {
+        updateAvailable()
+        networkType = 'CELLULAR'
+        const { result } = renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        expect(checkForUpdateAsync).not.toHaveBeenCalled()
+
+        await act(async () => {
+          setNetwork('WIFI')
+        })
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+        expect(result.current.updateReady).toBe(true)
+        expect(alertAlert).not.toHaveBeenCalled()
+      })
+
+      it('prompts on the next foreground for an update staged on Wi-Fi, even off Wi-Fi, without fetching again', async () => {
+        updateAvailable()
+        networkType = 'CELLULAR'
+        const { result } = renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        await act(async () => {
+          setNetwork('WIFI')
+        })
+        expect(result.current.updateReady).toBe(true)
+
+        await act(async () => {
+          setNetwork('CELLULAR')
+          mockAppState.__emit('background')
+        })
+        jest.clearAllMocks()
+        pressCancel()
+        await act(async () => {
+          mockAppState.__emit('active')
+        })
+        expect(checkForUpdateAsync).not.toHaveBeenCalled()
+        expect(alertAlert).toHaveBeenCalledWith('Update available', expect.any(String), expect.any(Array))
+        expect(result.current.updateReady).toBe(false)
+      })
+
+      it('leaves Wi-Fi coming back in the background to the foreground check', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        networkType = 'CELLULAR'
+        renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        await act(async () => {
+          mockAppState.__emit('background')
+          setNetwork('WIFI')
+        })
+        expect(checkForUpdateAsync).not.toHaveBeenCalled()
+
+        await act(async () => {
+          mockAppState.__emit('active')
+        })
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+      })
+
+      it('does not fetch again when the network reports Wi-Fi it was already on', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+
+        await act(async () => {
+          setNetwork('WIFI')
+        })
+        expect(checkForUpdateAsync).toHaveBeenCalledTimes(1)
+      })
+
+      it('removes the network listener on unmount', async () => {
+        ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+        const { unmount } = renderHook(() => useUpdater({ expoNetwork }))
+        await act(async () => {})
+        expect(networkListeners).toHaveLength(1)
+        unmount()
+        expect(networkListeners).toHaveLength(0)
+      })
     })
   })
 })
