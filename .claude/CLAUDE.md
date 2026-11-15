@@ -15,7 +15,7 @@ npm run lint       # ESLint
 npm run fix        # ESLint --fix
 npm run build      # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch # tsup --watch
-npm test           # Jest (55 tests)
+npm test           # Jest (67 tests)
 npm run test:watch # Jest in watch mode
 npm run typecheck  # tsc --noEmit
 npm run verify     # lint + test + typecheck + build, in that order
@@ -41,14 +41,18 @@ src/
   types.ts                 - UpdateManifest interface: { createdAt: string }
   network.ts               - ExpoNetworkModule/ExpoNetworkState (local mirror of the two expo-network calls) and isUnmetered (Wi-Fi or Ethernet)
   useUpdater.ts             - the hook: auto-check + manual check(), confirm/reload flow
+  reloadSplash.ts           - setReloadSplash and reloadScreenOptions: what expo-updates' reload cover shows (the app's splash)
   checkForUpdate.ts         - wraps expo-updates' checkForUpdateAsync/fetchUpdateAsync, returns UpdateManifest | null
   getUpdateConfirmation.ts  - default onConfirm: Alert.alert with Cancel/Restart, resolves a boolean
   globals.d.ts              - declares the `__DEV__` global (not in the default TS lib)
   __mocks__/
     expo-updates.ts          - jest mocks: checkForUpdateAsync, fetchUpdateAsync, reloadAsync, and a checkAutomatically value with a __setCheckAutomatically helper
-    react-native.ts          - jest mock: Alert.alert, Platform, and an AppState stub with __emit/__setCurrentState/__clearListeners test helpers
+    react-native.ts          - jest mock: Alert.alert, Platform, an Appearance stub with __setColorScheme, and an AppState stub with __emit/__setCurrentState/__clearListeners test helpers
+    expo-asset.ts            - jest mock: Asset.fromModule, whose downloadAsync gives a file:///cache localUri; __setAsset overrides the next asset
+    expo-constants.ts        - jest mock: a default export whose expoConfig tests set through __setExpoConfig
   __tests__/
-    useUpdater.test.ts        - 52 tests, covers both mocks plus a fake injected expo-network
+    useUpdater.test.ts        - covers the mocks plus a fake injected expo-network
+    reloadSplash.test.ts      - the reload cover's options from app.json and setReloadSplash
     network.test.ts           - isUnmetered, and a compile-time check that the real expo-network fits ExpoNetworkModule
 ```
 
@@ -73,6 +77,18 @@ expo-updates' `updates.checkAutomatically` (app.json, read at runtime as `Update
 
 `onInfo` is purely informational - it covers the three plain-Alert paths inside `check()` (dev-mode disabled, web unsupported, already up to date) - distinct from `onConfirm`'s cancel/restart decision, which defaults to `getUpdateConfirmation`'s Alert-based prompt when not supplied.
 
+### Restarting behind the splash (2026-11-15)
+
+Jay saw a white screen after accepting an OTA update in Lumber on Android, and CardTastic's splash giving way to white. `reloadAsync()` with no options makes expo-updates cover the app with its reload screen while the new bundle loads, and that screen defaults to `#ffffff` with a spinner (Android's `ReloadScreenConfiguration.kt`, iOS the same), whatever the app looks like. Every reload in the hook now goes through `reload()`, which passes `reloadScreenOptions()` (`reloadSplash.ts`):
+
+- **Color:** the `expo-splash-screen` plugin's `backgroundColor` from `Constants.expoConfig.plugins` (the public config keeps `plugins`; checked with `npx expo config --type public`), its `dark.backgroundColor` when `Appearance.getColorScheme()` is dark, with the plugin's `ios`/`android` object merged over the top level on its platform the way the plugin's own `getIosSplashConfig`/`getAndroidSplashConfig` do (DuelTastic and PuckTastic draw a 170-wide splash on Android, HexFleet a 320-wide one on iOS). No splash plugin: `undefined`, expo-updates' own screen. A spinner in black or white by luminance (`spinnerColorOn`, plain hex only).
+- **Art:** only what the app hands `setReloadSplash({ image, darkImage? })` (module-level, so it reaches every `useUpdater` instance, including @tastic/hud's UpdateDialog and Settings row, with no props through hud or @tastic/shell). The plugin's own image is a native resource JS can't reach. Drawn at the plugin's `imageWidth` (`?? 100`, expo-splash-screen's own default) by the art's aspect, `scale: 1`, centered, spinner off (`enabled: false` keeps the color for expo-updates' fallback spinner if the art fails).
+- **Why expo-asset:** the native reload screen only loads `http`, `file` and `data` URLs. An image bundled into an Android build resolves (`Image.resolveAssetSource`, what `reloadAsync` does with a `require()`) to a resource name, so it failed there and showed the spinner. `Asset.fromModule(...).downloadAsync()` copies an Android embedded resource (`file:///android_res/...`) to a cache file; on iOS, and for a bundle launched from an update, it is a file already.
+- **Never throws:** a failure in the art leaves the color and spinner, and the whole thing never blocks the reload.
+- **Limits, in expo-updates:** Android hides the cover at `RUN_JS_BUNDLE_END` and iOS at the first content (`RCTContentDidAppearNotification`), both before an app's splash gates open (the splash itself already hid in that launch and can't be shown again), so the app's window color shows for a moment. `showReloadScreen`/`hideReloadScreen`, which could hold it, are debug-only on Android. Apps set `android.backgroundColor` to the splash color so that moment isn't white.
+- **Peers:** `expo-asset` and `expo-constants` became required peers (>=57), devDependencies here too. Every Expo app has both through `expo`.
+- JS only: reaches existing builds in an OTA update. Not seen on a device.
+
 ## Public API
 
 From `src/index.ts`:
@@ -81,22 +97,25 @@ From `src/index.ts`:
 - `UseUpdaterOptions` (type) - `autoCheck?`, `autoPrompt?`, `expoNetwork?`, `onConfirm?`, `onError?`, `onInfo?`
 - `UseUpdaterReturn` (type) - `check`, `checking`, `updateReady`
 - `UpdateManifest` (type only) - `{ createdAt: string }`
+- `setReloadSplash(splash | null)` - the splash art for expo-updates' reload cover, module-wide; `ReloadSplash` (type) - `{ image: number, darkImage?: number }`
 - `ExpoNetworkModule`, `ExpoNetworkState` (types only) - the slice of expo-network `expoNetwork` takes
 
 ## Peer Dependencies
 
 - `expo-network` >=57.0.0 - optional, only for `WIFI_ONLY` apps (injected as `expoNetwork`, never imported)
 - `expo-updates` >=57.0.0 - required
+- `expo-asset` >=57.0.0 - required (copies the splash art to a file for the reload cover)
+- `expo-constants` >=57.0.0 - required (reads the splash plugin's colors from app.json)
 - `react` >=19.0.0 - required
 - `react-native` >=0.76.0 - required
 
 ## Testing
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
-- Mocks in `src/__mocks__/` for `react-native` and `expo-updates`
-- 55 tests in two suites: 52 hook tests (`src/__tests__/useUpdater.test.ts`) and 3 for `network.ts`
+- Mocks in `src/__mocks__/` for `react-native`, `expo-updates`, `expo-asset` and `expo-constants`
+- 67 tests in three suites: 54 hook tests (`src/__tests__/useUpdater.test.ts`), 10 for `reloadSplash.ts` and 3 for `network.ts`
 - `expoNetwork` is a plain fake in `useUpdater.test.ts` (`setNetwork` changes the type and fires its listeners), not a module mock, since the hook never imports expo-network
-- Coverage: 99.27% statements / 95% branches / 100% functions / 99.12% lines - well above the preset's 70/70/70/70 default, no local threshold override
+- Coverage: 99.45% statements / 94.06% branches / 100% functions / 99.33% lines - well above the preset's 70/70/70/70 default, no local threshold override
 - When adding new hook behavior, add a corresponding test case
 
 ## Code Style

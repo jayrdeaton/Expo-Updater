@@ -31,9 +31,19 @@ const AppState = {
   }
 }
 
+// The color scheme the app is in, set through __setColorScheme.
+let colorScheme: 'light' | 'dark' | null = 'light'
+
+const Appearance = {
+  getColorScheme: () => colorScheme,
+  __setColorScheme: (scheme: 'light' | 'dark' | null) => {
+    colorScheme = scheme
+  }
+}
+
 const Platform = {
   OS: 'ios' as string,
   select: (obj: Record<string, unknown>) => obj.ios ?? obj.default
 }
 
-export { Alert, AppState, Platform }
+export { Alert, Appearance, AppState, Platform }

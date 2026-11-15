@@ -26,7 +26,7 @@ It also works the other way: `checkAutomatically` only governs expo-updates' own
 npm install @rific/updater
 ```
 
-**Peer dependencies:** `expo-updates`, `react`, `react-native`. Optional: `expo-network`, for apps whose `checkAutomatically` is `WIFI_ONLY` (passed in as `expoNetwork`, see [Wi-Fi only](#wi-fi-only)).
+**Peer dependencies:** `expo-updates`, `expo-asset`, `expo-constants`, `react`, `react-native` (every Expo app has the two `expo-*` ones through `expo`). Optional: `expo-network`, for apps whose `checkAutomatically` is `WIFI_ONLY` (passed in as `expoNetwork`, see [Wi-Fi only](#wi-fi-only)).
 
 ---
 
@@ -127,6 +127,27 @@ The hook needs `expoNetwork` to tell Wi-Fi from cellular. Without it, a `WIFI_ON
 
 `checkAutomatically` is native config (written into `Expo.plist` and `AndroidManifest.xml` at build time), so changing it takes a new build, not an OTA update.
 
+### Restarting behind the splash
+
+When the user says yes, the app restarts into the update, and expo-updates covers it while the new code loads. By default that cover is a white screen with a spinner, on iOS and Android alike, whatever the app looks like. This hook gives it the app's splash instead:
+
+- **The color** comes from app.json by itself: the `expo-splash-screen` plugin's `backgroundColor`, or its `dark.backgroundColor` in dark mode. Every app with that plugin gets it with no code.
+- **The art** has to be handed over once, because the plugin's own copies are native resources JS can't reach. Pass the same image(s) app.json gives the plugin, next to your `SplashScreen.preventAutoHideAsync()`:
+
+```tsx
+import { setReloadSplash } from '@rific/updater'
+
+setReloadSplash({ image: require('./assets/images/splash-icon.png') })
+// or, with a different dark image:
+setReloadSplash({ image: require('./assets/images/splash-light.png'), darkImage: require('./assets/images/splash-dark.png') })
+```
+
+The art is drawn at the plugin's `imageWidth` (100 when app.json gives none) and its own aspect, centered, with no spinner, so it looks like the splash. The plugin's `ios` and `android` overrides apply on their platform, as the plugin applies them. Without `setReloadSplash` the screen is the splash color with a spinner in black or white, whichever reads on it. Art that won't load falls back to that too: the reload never waits on or fails over its cover.
+
+**It isn't the splash itself, and it lifts early.** No API shows the real splash again. expo-updates takes its cover down as soon as the new code has loaded on Android, and when the first content appears on iOS, so the app's own background shows for a moment while the first screen draws (its splash gates don't apply: the splash already hid in this launch). Its calls to keep the cover up longer only work in debug builds. Give Android a window color in app.json (`android.backgroundColor`, the splash color is a good choice) so that moment isn't white either.
+
+This is all JavaScript: it ships in an OTA update to existing builds.
+
 ---
 
 ## API
@@ -165,11 +186,19 @@ interface UseUpdaterReturn {
 | `checking` | `true` while `check()` - or an `autoPrompt` auto-prompt - is in flight. Safe to drive a loading spinner. Concurrent calls are ignored via a ref guard. |
 | `updateReady` | `true` once a fetch has staged an update. With the default `autoPrompt: true` this is transient (cleared as soon as the dialog resolves); with `autoPrompt: false` it persists until `check()` runs, so it's the useful signal for a settings badge there. |
 
+
+### `setReloadSplash(splash)`
+
+```ts
+setReloadSplash({ image: number, darkImage?: number } | null)
+```
+
+The splash art for the cover expo-updates shows while an update restarts the app (see [Restarting behind the splash](#restarting-behind-the-splash)). Module-wide: it covers every `useUpdater` instance in the app, including ones inside other packages (@tastic/hud's update dialog and Settings row). `null` goes back to the color alone.
 ---
 
 ## How updates work
 
-**Automatic (mount + foreground):** When `autoCheck` is `true`, the hook fetches once on mount (covering cold launch) and also registers an `AppState` listener that re-fetches each time the app returns from background/inactive to active. Both paths call `checkForUpdateAsync()` + `fetchUpdateAsync()` and share the same confirm/reload flow. By default (`autoPrompt: true`) a found update goes straight into the confirmation dialog and `reloadAsync()` on confirm - no tap required. With `autoPrompt: false`, the downloaded bundle just sits on disk instead - no prompt, no restart - until a manual `check()` is called. Both paths follow the app's `updates.checkAutomatically` the way expo-updates' own launch check does (see [Wi-Fi only](#wi-fi-only)).
+**Automatic (mount + foreground):** When `autoCheck` is `true`, the hook fetches once on mount (covering cold launch) and also registers an `AppState` listener that re-fetches each time the app returns from background/inactive to active. Both paths call `checkForUpdateAsync()` + `fetchUpdateAsync()` and share the same confirm/reload flow. By default (`autoPrompt: true`) a found update goes straight into the confirmation dialog and `reloadAsync()` on confirm, behind the app's splash (see [Restarting behind the splash](#restarting-behind-the-splash)) - no tap required. With `autoPrompt: false`, the downloaded bundle just sits on disk instead - no prompt, no restart - until a manual `check()` is called. Both paths follow the app's `updates.checkAutomatically` the way expo-updates' own launch check does (see [Wi-Fi only](#wi-fi-only)).
 
 **Manual (`check()`):** Runs the full flow - check (or reuse staged manifest) → confirmation dialog → `reloadAsync()`. The user sees what was released and chooses whether to restart now.
 

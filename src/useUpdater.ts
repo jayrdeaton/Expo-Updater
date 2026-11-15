@@ -5,6 +5,7 @@ import { Alert, AppState, AppStateStatus, Platform } from 'react-native'
 import { checkForUpdate } from './checkForUpdate'
 import { getUpdateConfirmation } from './getUpdateConfirmation'
 import { type ExpoNetworkModule, isUnmetered } from './network'
+import { reloadScreenOptions } from './reloadSplash'
 import { UpdateManifest } from './types'
 
 export interface UseUpdaterOptions {
@@ -30,6 +31,10 @@ export interface UseUpdaterReturn {
 }
 
 const isUnsupported = () => __DEV__ || Platform.OS === 'web'
+
+// Restarts into the downloaded update behind the app's splash (reloadSplash.ts), not expo-updates' white
+// loading screen.
+const reload = async () => reloadAsync({ reloadScreenOptions: await reloadScreenOptions() })
 
 export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn => {
   const { autoCheck = true, autoPrompt = true, expoNetwork, onConfirm, onError, onInfo } = options
@@ -95,7 +100,7 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
           try {
             const confirmFn = onConfirmRef.current ?? getUpdateConfirmation
             const confirmed = await confirmFn(manifest)
-            if (confirmed) await reloadAsync()
+            if (confirmed) await reload()
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Could not check for updates.'
             if (onErrorRef.current) onErrorRef.current(message)
@@ -166,7 +171,7 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
       const confirmFn = onConfirm ?? getUpdateConfirmation
       const confirmed = await confirmFn(manifest)
       if (!confirmed) return
-      await reloadAsync()
+      await reload()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not check for updates.'
       if (onError) onError(message)

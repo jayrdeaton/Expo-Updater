@@ -66,6 +66,8 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-native": "^5.0.0",
+    "expo-asset": "^58.0.21",
+    "expo-constants": "^58.0.16",
     "expo-network": "^58.0.4",
     "expo-updates": ">=0.25.0",
     "jest": "^30.4.2",
@@ -77,6 +79,8 @@
     "typescript": "~6.0.3"
   },
   "peerDependencies": {
+    "expo-asset": ">=57.0.0",
+    "expo-constants": ">=57.0.0",
     "expo-network": ">=57.0.0",
     "expo-updates": ">=57.0.0",
     "react": ">=19.0.0",

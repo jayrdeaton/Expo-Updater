@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import Constants from 'expo-constants'
 import * as Updates from 'expo-updates'
 import { checkForUpdateAsync, fetchUpdateAsync, reloadAsync } from 'expo-updates'
 import { Alert, AppState, Platform } from 'react-native'
@@ -21,6 +22,7 @@ const mockManifest = {
 }
 
 const setCheckAutomatically = (Updates as unknown as { __setCheckAutomatically: (value: string | null) => void }).__setCheckAutomatically
+const setExpoConfig = (Constants as unknown as { __setExpoConfig: (config: { plugins?: unknown[] } | null) => void }).__setExpoConfig
 
 // Stands in for `import * as ExpoNetwork from 'expo-network'`, which the hook takes as an option
 // rather than importing, so it's a plain fake here instead of a module mock.
@@ -137,6 +139,19 @@ describe('useUpdater', () => {
       const { result } = renderHook(() => useUpdater())
       await act(() => result.current.check())
       expect(reloadAsync).toHaveBeenCalled()
+    })
+
+    it("restarts behind the app's splash, not expo-updates' white screen", async () => {
+      setExpoConfig({ plugins: [['expo-splash-screen', { backgroundColor: '#050505' }]] })
+      updateAvailable()
+      ;(reloadAsync as jest.Mock).mockResolvedValue(undefined)
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[1].onPress()
+      })
+      const { result } = renderHook(() => useUpdater({ autoCheck: false }))
+      await act(() => result.current.check())
+      expect(reloadAsync).toHaveBeenCalledWith({ reloadScreenOptions: { backgroundColor: '#050505', fade: true, spinner: { color: '#FFFFFF' } } })
+      setExpoConfig(null)
     })
 
     it('does not reload when user cancels', async () => {
@@ -265,6 +280,19 @@ describe('useUpdater', () => {
       renderHook(() => useUpdater())
       await act(async () => {})
       expect(reloadAsync).toHaveBeenCalled()
+    })
+
+    it("restarts behind the app's splash from the mount-time prompt too", async () => {
+      setExpoConfig({ plugins: [['expo-splash-screen', { backgroundColor: '#050505' }]] })
+      updateAvailable()
+      ;(reloadAsync as jest.Mock).mockResolvedValue(undefined)
+      alertAlert.mockImplementationOnce((_title: string, _msg: string, buttons: Array<{ onPress: () => void }>) => {
+        buttons[1].onPress()
+      })
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(reloadAsync).toHaveBeenCalledWith({ reloadScreenOptions: { backgroundColor: '#050505', fade: true, spinner: { color: '#FFFFFF' } } })
+      setExpoConfig(null)
     })
 
     it('stages silently without prompting on mount when autoPrompt is false', async () => {
