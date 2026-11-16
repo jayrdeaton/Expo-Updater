@@ -4,6 +4,7 @@ import * as Updates from 'expo-updates'
 import { checkForUpdateAsync, fetchUpdateAsync, reloadAsync } from 'expo-updates'
 import { Alert, AppState, Platform } from 'react-native'
 
+import * as updates from '../updates'
 import { useUpdater } from '../useUpdater'
 
 type GlobalWithDev = { __DEV__: boolean }
@@ -388,8 +389,9 @@ describe('useUpdater', () => {
 
     it('removes AppState listener on unmount', async () => {
       const { unmount } = renderHook(() => useUpdater())
-      expect(AppState.addEventListener).toHaveBeenCalledTimes(1)
+      // Listens once expo-updates has loaded and the hook has read checkAutomatically
       await act(async () => {})
+      expect(AppState.addEventListener).toHaveBeenCalledTimes(1)
       jest.clearAllMocks()
       unmount()
       mockAppState.__emit('active')
@@ -732,6 +734,65 @@ describe('useUpdater', () => {
         unmount()
         expect(networkListeners).toHaveLength(0)
       })
+    })
+  })
+
+  // expo-updates leaves a listener on its native module as it loads, which on web outlives Expo's dev
+  // server running the server render again for every page (updates.ts), so it must never load where
+  // the hook does nothing
+  describe('loading expo-updates', () => {
+    let load: jest.SpyInstance
+    beforeEach(() => {
+      load = jest.spyOn(updates, 'loadUpdates')
+    })
+    afterEach(() => {
+      load.mockRestore()
+    })
+
+    it.each([
+      [
+        'on web',
+        () => {
+          ;(Platform as { OS: string }).OS = 'web'
+        }
+      ],
+      [
+        'in development',
+        () => {
+          g.__DEV__ = true
+        }
+      ]
+    ])('never loads it %s, even for a manual check', async (_where, setUp) => {
+      setUp()
+      const { result } = renderHook(() => useUpdater({ onInfo: jest.fn() }))
+      await act(async () => {})
+      await act(() => result.current.check())
+      expect(load).not.toHaveBeenCalled()
+    })
+
+    it('starts nothing when unmounted before it has loaded', async () => {
+      const { unmount } = renderHook(() => useUpdater())
+      unmount()
+      await act(async () => {})
+      expect(AppState.addEventListener).not.toHaveBeenCalled()
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+    })
+
+    it('makes no auto-checks when it fails to load', async () => {
+      load.mockRejectedValueOnce(new Error('Cannot find module'))
+      renderHook(() => useUpdater())
+      await act(async () => {})
+      expect(AppState.addEventListener).not.toHaveBeenCalled()
+      expect(checkForUpdateAsync).not.toHaveBeenCalled()
+    })
+
+    it('never loads it with autoCheck off until a manual check', async () => {
+      ;(checkForUpdateAsync as jest.Mock).mockResolvedValue({ isAvailable: false })
+      const { result } = renderHook(() => useUpdater({ autoCheck: false, onInfo: jest.fn() }))
+      await act(async () => {})
+      expect(load).not.toHaveBeenCalled()
+      await act(() => result.current.check())
+      expect(load).toHaveBeenCalled()
     })
   })
 })

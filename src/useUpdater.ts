@@ -1,4 +1,3 @@
-import { checkAutomatically, reloadAsync } from 'expo-updates'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, AppState, AppStateStatus, Platform } from 'react-native'
 
@@ -7,6 +6,7 @@ import { getUpdateConfirmation } from './getUpdateConfirmation'
 import { type ExpoNetworkModule, isUnmetered } from './network'
 import { reloadScreenOptions } from './reloadSplash'
 import { UpdateManifest } from './types'
+import { loadUpdates } from './updates'
 
 export interface UseUpdaterOptions {
   autoCheck?: boolean
@@ -34,7 +34,10 @@ const isUnsupported = () => __DEV__ || Platform.OS === 'web'
 
 // Restarts into the downloaded update behind the app's splash (reloadSplash.ts), not expo-updates' white
 // loading screen.
-const reload = async () => reloadAsync({ reloadScreenOptions: await reloadScreenOptions() })
+const reload = async () => {
+  const { reloadAsync } = await loadUpdates()
+  await reloadAsync({ reloadScreenOptions: await reloadScreenOptions() })
+}
 
 export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn => {
   const { autoCheck = true, autoPrompt = true, expoNetwork, onConfirm, onError, onInfo } = options
@@ -49,6 +52,11 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
   const onConfirmRef = useRef(onConfirm)
   const onErrorRef = useRef(onError)
 
+  // The app's own app.json `updates.checkAutomatically`, which expo-updates only applies to its native
+  // launch check: read here too so one setting covers this hook's checks as well. Undefined until
+  // expo-updates has loaded (updates.ts), which it never does where the hook makes no checks.
+  const [policy, setPolicy] = useState<string | null>()
+
   useEffect(() => {
     onConfirmRef.current = onConfirm
     onErrorRef.current = onError
@@ -56,12 +64,23 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
 
   useEffect(() => {
     if (!autoCheck || isUnsupported()) return
+    let live = true
+    loadUpdates()
+      .then(({ checkAutomatically }) => {
+        if (live) setPolicy(checkAutomatically)
+      })
+      // Auto-checks never surface errors (runAutoCheck below); a manual check() reports one.
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [autoCheck])
 
-    // The app's own app.json `updates.checkAutomatically`, which expo-updates only applies to its
-    // native launch check: read here too so one setting covers this hook's checks as well. NEVER and
-    // ON_ERROR_RECOVERY leave updates to a manual check(). ON_LOAD, and null (expo-updates
+  useEffect(() => {
+    if (!autoCheck || isUnsupported() || policy === undefined) return
+
+    // NEVER and ON_ERROR_RECOVERY leave updates to a manual check(). ON_LOAD, and null (expo-updates
     // disabled), keep the checks on any network.
-    const policy: string | null = checkAutomatically
     if (policy === 'NEVER' || policy === 'ON_ERROR_RECOVERY') return
     const wifiOnly = policy === 'WIFI_ONLY'
     if (wifiOnly && !expoNetwork) return
@@ -142,7 +161,7 @@ export const useUpdater = (options: UseUpdaterOptions = {}): UseUpdaterReturn =>
       subscription.remove()
       networkSubscription?.remove()
     }
-  }, [autoCheck, autoPrompt, expoNetwork])
+  }, [autoCheck, autoPrompt, expoNetwork, policy])
 
   const check = async (): Promise<void> => {
     if (__DEV__) {

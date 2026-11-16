@@ -15,7 +15,7 @@ npm run lint       # ESLint
 npm run fix        # ESLint --fix
 npm run build      # tsup, outputs CJS + ESM + types to dist/
 npm run build:watch # tsup --watch
-npm test           # Jest (67 tests)
+npm test           # Jest (72 tests)
 npm run test:watch # Jest in watch mode
 npm run typecheck  # tsc --noEmit
 npm run verify     # lint + test + typecheck + build, in that order
@@ -43,6 +43,7 @@ src/
   useUpdater.ts             - the hook: auto-check + manual check(), confirm/reload flow
   reloadSplash.ts           - setReloadSplash and reloadScreenOptions: what expo-updates' reload cover shows (the app's splash)
   checkForUpdate.ts         - wraps expo-updates' checkForUpdateAsync/fetchUpdateAsync, returns UpdateManifest | null
+  updates.ts                - loadUpdates: expo-updates, imported the first time a check or reload runs (never on web or in development)
   getUpdateConfirmation.ts  - default onConfirm: Alert.alert with Cancel/Restart, resolves a boolean
   globals.d.ts              - declares the `__DEV__` global (not in the default TS lib)
   __mocks__/
@@ -89,6 +90,15 @@ Jay saw a white screen after accepting an OTA update in Lumber on Android, and C
 - **Peers:** `expo-asset` and `expo-constants` became required peers (>=57), devDependencies here too. Every Expo app has both through `expo`.
 - JS only: reaches existing builds in an OTA update. Not seen on a device.
 
+### expo-updates loads only when it's used (2026-11-16)
+
+Nothing imports `expo-updates` at the top of a file any more: `loadUpdates()` (`updates.ts`, a dynamic `import()`) loads it the first time `checkForUpdate`, `reload` or the auto-check needs it, which on web and in development (`isUnsupported`) is never. The auto-check reads `checkAutomatically` once it has loaded (the hook's `policy` state, undefined until then), so it starts a moment after mount rather than in the first effect; a load that fails makes no auto-checks, and a manual `check()` reports it through `onError` as before. `import type` from expo-updates is fine (erased).
+
+- **Why:** expo-updates adds a state listener to its native module as it loads (`UpdatesEmitter.js`) and never removes it. On web that module is one object on `globalThis.expo` (`registerWebModule`), and Expo's dev server keeps that global while it runs the whole server bundle again for every page it renders (web `output: "static"`), so every page load left one more listener holding a complete copy of the app and its parsed source map. Found in HexFleet, whose web dev server ran out of memory after about fifteen page loads: a heap snapshot traced the old copies to `globalThis.expo.modules.ExpoUpdates.listeners`. With this change, evaluating HexFleet's server bundle over and over held flat (465 MB with source maps, where it had grown 160 MB an evaluation).
+- **Not the whole story there:** HexFleet's dev server still leaks through a second path, `react-reconciler` (bundled, via Skia) wrapping the React that Expo's dev server shares between evaluations. That's Expo's and the app's, not this package's; see HexFleet's CLAUDE.md, "Web dev server memory".
+- **The builds keep it lazy:** tsup leaves `import("expo-updates")` as is in both `dist/index.mjs` and `dist/index.js`, which Metro bundles as an async dependency, evaluated only when called.
+- **Tested:** never loaded on web or in development even for a manual `check()`, loaded with `autoCheck: false` only on a manual check, nothing started when unmounted before it loads, and no auto-checks when it fails to load. The AppState listener test now checks after the load.
+
 ## Public API
 
 From `src/index.ts`:
@@ -113,7 +123,7 @@ From `src/index.ts`:
 
 - Framework: Jest (`@infinitetoken/jest-config/react-native`), jsdom environment
 - Mocks in `src/__mocks__/` for `react-native`, `expo-updates`, `expo-asset` and `expo-constants`
-- 67 tests in three suites: 54 hook tests (`src/__tests__/useUpdater.test.ts`), 10 for `reloadSplash.ts` and 3 for `network.ts`
+- 72 tests in three suites: 59 hook tests (`src/__tests__/useUpdater.test.ts`), 10 for `reloadSplash.ts` and 3 for `network.ts`
 - `expoNetwork` is a plain fake in `useUpdater.test.ts` (`setNetwork` changes the type and fires its listeners), not a module mock, since the hook never imports expo-network
 - Coverage: 99.45% statements / 94.06% branches / 100% functions / 99.33% lines - well above the preset's 70/70/70/70 default, no local threshold override
 - When adding new hook behavior, add a corresponding test case

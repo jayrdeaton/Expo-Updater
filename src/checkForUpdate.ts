@@ -1,8 +1,8 @@
-import { checkForUpdateAsync, fetchUpdateAsync } from 'expo-updates'
-
 import { UpdateManifest } from './types'
+import { loadUpdates } from './updates'
 
 export const checkForUpdate = async (): Promise<UpdateManifest | null> => {
+  const { checkForUpdateAsync, fetchUpdateAsync } = await loadUpdates()
   const { isAvailable } = await checkForUpdateAsync()
   if (!isAvailable) return null
   const { manifest } = await fetchUpdateAsync()
