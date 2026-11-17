@@ -194,6 +194,7 @@ setReloadSplash({ image: number, darkImage?: number } | null)
 ```
 
 The splash art for the cover expo-updates shows while an update restarts the app (see [Restarting behind the splash](#restarting-behind-the-splash)). Module-wide: it covers every `useUpdater` instance in the app, including ones inside other packages (@tastic/hud's update dialog and Settings row). `null` goes back to the color alone.
+
 ---
 
 ## How updates work
@@ -202,7 +203,7 @@ The splash art for the cover expo-updates shows while an update restarts the app
 
 **Manual (`check()`):** Runs the full flow - check (or reuse staged manifest) → confirmation dialog → `reloadAsync()`. The user sees what was released and chooses whether to restart now.
 
-**Web / DEV:** Both are no-ops. `check()` shows an informational alert explaining why. The foreground listener is never registered.
+**Web / DEV:** Both are no-ops. `check()` shows an informational alert explaining why. The foreground listener is never registered, and expo-updates itself is never loaded there: the hook imports it the first time a check or reload runs. (Loading it adds a listener to its web module on `globalThis.expo` that it never removes, and Expo's web dev server keeps that global while it renders every page, so a copy of the app per page load stayed in memory until the server ran out.)
 
 ---
 
@@ -233,7 +234,7 @@ publish.
 
 > **0.3.0 changed the default:** `autoPrompt` now defaults to `true`, so a bare `useUpdater()` prompts on its own the moment a foreground fetch finds something - it no longer just stages silently for next launch. Every app below was written against the old silent-by-default behavior; pass `autoPrompt: false` explicitly if that's still what you want (this is what Lumber's and Utility's manual-check hooks already do via `autoCheck: false`, so they're unaffected - it's the bare root-layout `useUpdater()` calls and the games that actually change behavior on upgrade).
 >
-> **Next release adds a mount-time check:** `autoCheck` now also fetches once on mount, in addition to the existing foreground `AppState` listener - covering cold launch, which previously only got an update via native `expo-updates` (`checkAutomatically`), silently and outside this hook's confirm/reload flow. Any app with a bare root-layout `useUpdater()` (default `autoPrompt: true`) will now show the confirm dialog on cold launch too, not just on foreground return.
+> **0.3.2 added a mount-time check:** `autoCheck` now also fetches once on mount, in addition to the existing foreground `AppState` listener - covering cold launch, which previously only got an update via native `expo-updates` (`checkAutomatically`), silently and outside this hook's confirm/reload flow. Any app with a bare root-layout `useUpdater()` (default `autoPrompt: true`) will now show the confirm dialog on cold launch too, not just on foreground return.
 
 - **Lumber** (`../Lumber`): account screen, shows version + update badge. Root layout's bare `useUpdater()` will start auto-prompting on upgrade unless changed.
 - **Utility** (`../Utility`): settings modal, uses `@rific/toaster` for `onError`. Same root-layout caveat as Lumber.
