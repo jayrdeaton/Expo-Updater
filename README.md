@@ -252,3 +252,7 @@ yalc add @rific/updater
 ```
 
 Use `yalc` not `npm link` - Metro doesn't resolve symlinks reliably.
+
+---
+
+Made by [Infinite Token](https://www.infinitetoken.com), the team behind [Lumber](https://lumber.infinitetoken.com): end-to-end encrypted logging.
